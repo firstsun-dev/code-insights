@@ -55,6 +55,8 @@ A `.code-insights.md` appears at the project root containing:
 
 They read it in 5 minutes and understand the codebase's story. The original developer did nothing special — they just used their AI tools normally. code-insights did the extraction.
 
+**The distribution angle:** `.code-insights.md` is shareable, screenshottable, and tweetable. It's the first knowledge artifact written *by* your AI tools, *for* your AI tools and your teammates. "I ran one command and got 12 architectural decisions extracted from 400 sessions" is the HN post. The file is the artifact; `code-insights attach` is the verb.
+
 ---
 
 ## 4. Feature Design — Phase 1 (Personal Tier)
@@ -105,12 +107,14 @@ rules:
     category: database
     confidence: 95
     context: "Prevents SQLITE_BUSY under concurrent reads from dashboard + CLI sync"
+    last_reinforced: "2026-04-18"
 
   - id: migration-raw-sql
     rule: "Write SQLite migrations as raw SQL in applyVN() functions — never ORM migration tools"
     category: database
     confidence: 92
     context: "ORM migrations failed silently on schema V6; raw SQL is auditable"
+    last_reinforced: "2026-04-01"
 
 friction_hotspots:
   - category: stale-assumptions
@@ -167,6 +171,7 @@ proven_patterns:
 | No user-editable sections | Single clear identity: read-only extracted knowledge. Developers add custom rules to CLAUDE.md. |
 | `confidence` on rules | AI agents can weight or filter rules by confidence; surfaces from LLM synthesis |
 | `context` on rules | One-line rationale for each rule — helps AI agents judge applicability |
+| `last_reinforced` on rules | ISO date of most recent session that reinforced this rule — lets agents and developers judge per-rule freshness without algorithmic decay |
 | Section count caps | Prevents unreadable files for high-volume projects; caps enforced in code not by LLM |
 
 **LLM hallucination guard (in system prompt):**
@@ -179,11 +184,11 @@ proven_patterns:
 **Commands:**
 
 ```bash
-# Primary form:
-code-insights export --format repo [options]
+# Primary command (user-facing):
+code-insights attach [project-name] [options]
 
-# Short alias (more discoverable, verb-first):
-code-insights attach [project-name]
+# Canonical underlying form (internal plumbing, not surfaced in user docs):
+code-insights export --format repo [options]
 
 Options:
   --project <name>    Project to export (fuzzy-matched; auto-detected from cwd if omitted)
@@ -195,12 +200,23 @@ Options:
 ```
 
 **Notes:**
-- `code-insights attach` is an alias for `code-insights export --format repo`
+- `attach` is the primary user-facing command. `export --format repo` is the canonical underlying form — do not surface it in user docs, help text, or the dashboard UI.
 - Fuzzy project matching: if the name matches multiple projects, show a numbered list and ask the user to pick. Never silently pick the closest match.
-- `--no-llm` mode: generates YAML frontmatter (deterministic, from SQLite aggregations) + `rules[]` from pre-existing reflect snapshot `claudeMdRules[]`. Markdown body sections omitted. Useful for CI or users without LLM configured.
-- `--check` mode: reads `sessions_at_generation` from existing file, compares to current session count. Exits 1 if delta > 50 (configurable). No generation, no output. For pre-commit hooks and CI gates.
+- `--no-llm` mode: generates YAML frontmatter only (deterministic, from SQLite aggregations) + `rules[]` from pre-existing reflect snapshot `claudeMdRules[]`. Markdown body (Decisions, Friction, Patterns narrative) is omitted entirely. The terminal output must make this explicit: "Generated: frontmatter + rules only (--no-llm mode; markdown narrative skipped)."
+- `--check` mode: reads `sessions_at_generation` from existing file's YAML frontmatter, compares to current session count via direct SQLite query (no LLM call, no server required). Exits 1 if delta > configurable threshold (default: 50). For pre-commit hooks and CI gates. See Section 9 for full rationale.
 
-**CLI-to-server invocation model:** The CLI starts a transient server instance (same pattern as `code-insights reflect`), calls `POST /api/export/generate` with `format: 'repo'`, receives the response, and shuts down the server. The server is not required to be running independently.
+**CLI-to-server invocation model — open implementation decision:**
+
+> ⚠ The original spec claimed `attach` would use "the same transient server pattern as `reflect`." This is incorrect: `reflect.ts` calls `checkServer()` and exits if the server is not already running — it does not start a transient server instance. No existing transient server startup code exists in the codebase.
+
+Two valid approaches for the implementer to choose between:
+
+| Option | How it works | Trade-off |
+|--------|-------------|-----------|
+| **A — Require running server** | Same as `reflect`: check server is up, call `POST /api/export/generate`. Error clearly if not running. | Consistent with `reflect` UX; user must run `code-insights dashboard` first |
+| **B — Direct DB path** | Extract `buildRepoExportContext()` so CLI calls it directly against SQLite without going through the server. LLM call still goes through the server's provider abstraction. | Lower friction (no server required); more implementation work to extract the pipeline |
+
+**Recommendation: Option B** — `attach` is a standalone command that should work without requiring the dashboard to be open. The LLM call can reuse the existing provider abstraction already available in the CLI (see `AnalysisRunner` pattern from Phase 12). Document the chosen approach in the implementation plan.
 
 **Terminal output (first-time generation):**
 
@@ -227,12 +243,12 @@ Options:
 
   Written: /Users/dev/code-insights/.code-insights.md (4.2 KB)
 
-  → Add reference to CLAUDE.md? This helps AI agents find the file automatically.
-    Suggested line: "See .code-insights.md for AI-extracted codebase knowledge."
-    [add/skip]:
-
   Add to version control? This lets the knowledge travel with your repo.
   Add to .gitignore instead (keep personal)? [commit/ignore/skip]: commit
+
+  → Add reference to CLAUDE.md? This helps AI agents find the file automatically.
+    Suggested line: "See .code-insights.md for AI-extracted codebase knowledge."
+    [add/skip]: add
 
   Tip: Regenerate after more sessions: code-insights attach
 ```
@@ -506,7 +522,8 @@ const SCRUB_PATTERNS = [
     replacement: '[IP_ADDRESS]' },
   { pattern: /(?:\/Users\/|\/home\/|C:\\Users\\)[^\s'",)}\]]+/g,
     replacement: '[USER_PATH]' },
-  { pattern: /[A-Z_]{3,}=["']?[^\s'",)}\]]{8,}["']?/g,
+  // Narrowed to secret-like names only — broad [A-Z_]= patterns false-positive on NODE_ENV, AUTH_METHOD, etc.
+  { pattern: /(?:SECRET|TOKEN|PASSWORD|KEY|CREDENTIAL|AUTH|API_KEY|ACCESS_KEY|PRIVATE)[A-Z_]*=["']?[^\s'",)}\]]{8,}["']?/g,
     replacement: '[ENV_VAR]' },
 ];
 ```
@@ -524,23 +541,35 @@ const SCRUB_PATTERNS = [
 
 ### 5.4 Schema Changes
 
-**Schema V10 — topic tag extraction (added from TA review):**
+**Schema V10 (Phase 1) — topic tag extraction:**
 
 ```sql
 -- New column on insights table for semantic topic tagging
-ALTER TABLE insights ADD COLUMN topic_tags TEXT; -- JSON array e.g. '["database/sqlite", "migrations"]'
+-- JSON array stored as TEXT: e.g. '["database/sqlite", "migrations"]'
+ALTER TABLE insights ADD COLUMN topic_tags TEXT;
 
--- GIN-equivalent full-text index for SQLite (json_each workaround)
--- Conflict detection queries topic overlap via JSON functions
+-- No SQLite GIN index needed in Phase 1 — topic_tags are only used for
+-- local conflict pre-flight (Phase 3) and context queries (Phase 2).
+-- JSON overlap queries use json_each() at query time for small local DBs.
+-- Index deferred to Phase 3 migration (V11) when query volume justifies it.
 ```
 
-Topic tags are extracted by the LLM at analysis time (not derived on-the-fly at query time). A `topic-normalize.ts` module (mirrors `friction-normalize.ts`) prevents tag drift. Backfill via `reflect backfill --topics`.
+Topic tags are extracted by the LLM at analysis time — not derived on-the-fly at query time (keyword-search-at-query-time breaks conflict detection and cross-author merging). A `topic-normalize.ts` module (mirrors `friction-normalize.ts`) prevents tag drift across sessions.
 
-New local sync tracking table:
+**Backfill UX (important):** `reflect backfill --topics` runs an LLM call per un-tagged session. Users with 400+ sessions (the spec's killer use case) face meaningful LLM cost. The backfill command must follow the existing `backfillAction()` pattern:
+- Show estimated session count before starting
+- Show per-call cost estimate (same as analysis runs)
+- Require confirmation prompt before proceeding
+- Support `--dry-run` to preview scope without running
+
+> **`knowledge_sync` table is NOT part of V10.** It has no consumer until Phase 3 (team sync), which is blocked on a founder decision. Including it in V10 locks in a schema that may change before Phase 3 ships. It will be introduced in `applyV11` when Phase 3 begins.
+
+**Schema V11 (Phase 3) — team sync tracking:**
 ```sql
+-- Deferred to Phase 3 applyV11() — no consumer in Phase 1 or 2
 CREATE TABLE IF NOT EXISTS knowledge_sync (
   insight_id    TEXT PRIMARY KEY REFERENCES insights(id),
-  remote_id     TEXT NOT NULL,    -- UUID from team DB (Phase 3+)
+  remote_id     TEXT NOT NULL,    -- UUID from team DB
   pushed_at     TEXT NOT NULL,
   last_status   TEXT NOT NULL     -- 'pushed' | 'conflict-pending' | 'ignored'
 );
@@ -589,7 +618,7 @@ This is the bridge that makes agents automatically find the file. The CLI propos
 | `dashboard/src/lib/api.ts` | Add `'repo'` to format type; add `writeRepoFile()`, `getRepoContent()` API functions |
 | `dashboard/src/pages/ExportPage.tsx` | Add Repo format card; redesign Step 4 |
 | `cli/src/index.ts` | Register `export` command and `attach` alias |
-| `cli/src/db/migrate.ts` | Add `applyV10()` for `topic_tags` column + `knowledge_sync` table |
+| `cli/src/db/migrate.ts` | Add `applyV10()` for `topic_tags` column only (`knowledge_sync` deferred to Phase 3 `applyV11`) |
 
 **Safest implementation order:**
 1. `project-root.ts` — pure utility, no deps
@@ -836,115 +865,59 @@ With team DB configured, `code-insights attach` generates from the full team's k
 
 ---
 
-## 9. Proposed Extensions — For Discussion
+## 9. Extensions — Decisions Made
 
-These are not yet approved. Each has trade-offs to decide before including in any implementation plan.
-
----
-
-### 9.1 Path-Scoped Rules (`affects` field)
-
-**The idea:** Add an optional `affects` field to each rule in the YAML frontmatter — a glob pattern array indicating which file paths the rule applies to.
-
-```yaml
-rules:
-  - id: migration-raw-sql
-    rule: "Write SQLite migrations as raw SQL in applyVN() functions"
-    category: database
-    confidence: 92
-    context: "ORM migrations failed silently on schema V6; raw SQL is auditable"
-    affects: ["**/migrations/**", "**/db/**", "**/migrate.ts"]
-```
-
-**Why it matters:** AI agents currently get all rules regardless of what file they're editing. An agent editing a React component doesn't need SQLite WAL mode rules. With `affects`, agents could filter to only relevant rules — reducing noise and improving rule-to-context precision.
-
-**Trade-offs:**
-- Adds complexity to the LLM prompt (must classify which paths each rule applies to)
-- LLM-generated glob patterns may be imprecise — needs validation
-- Agents must actually implement filtering logic (can't just pass the file wholesale)
-- Could be left empty (`affects: []` = applies to all) to make it backward-compatible
-
-**Decision needed:** Worth the added LLM complexity for better agent targeting?
+Reviewed by developer, technical architect, and product strategist personas (2026-05-05). All decisions below are final.
 
 ---
 
-### 9.2 Confidence Decay for Stale Rules
+### 9.1 Path-Scoped Rules (`affects` field) — **Deferred**
 
-**The idea:** Rules that haven't appeared in recent sessions have their confidence score automatically reduced on regeneration. A rule derived from a pattern that stopped appearing may reflect an outdated approach.
+**The idea:** An optional `affects` glob array on each rule so agents can filter to only rules relevant to the file they're editing.
 
-```yaml
-rules:
-  - id: old-approach-rule
-    rule: "Use X for Y"
-    confidence: 47           ← was 85; decayed over 6 months of non-reinforcement
-    confidence_trend: declining  ← new field: 'rising' | 'stable' | 'declining'
-    context: "..."
-```
+**Why deferred (unanimous):**
+- LLM-generated glob patterns are unreliable — insight content is already scrubbed of machine paths before reaching the LLM, so globs would be inferred semantically, not from actual file paths
+- The `context` field already tells agents what a rule applies to — agents self-filter on semantic relevance
+- Cursor `.cursorrules` already supports path-scoped rules; this would be catching up, not leading
+- Agents must implement the filtering logic (out of code-insights' control); low-confidence globs could actively mislead
 
-**Why it matters:** Currently rules only go stale silently. Confidence decay makes staleness visible at the rule level rather than just at the file level (via `sessions_at_generation`).
-
-**Trade-offs:**
-- Requires storing confidence history across regenerations — needs a local registry (small SQLite table or JSON sidecar)
-- Decay rate must be calibrated — too aggressive and valid rules disappear; too gentle and stale rules persist
-- "Not reinforced recently" doesn't mean "wrong" — some rules are set-and-forget (WAL mode)
-- Simpler alternative: just display a `last_reinforced` date on rules rather than auto-decaying confidence
-
-**Decision needed:** Automatic decay vs. just showing reinforcement recency? Or defer entirely?
+**Revisit:** When there is evidence that agents are signal-saturated by project-wide rules, or when path information is reliably available in insight content.
 
 ---
 
-### 9.3 Inline Changelog Section
+### 9.2 Confidence Decay — **Killed**
 
-**The idea:** Each time the file is regenerated, append a brief changelog entry at the bottom summarizing what changed. The diff that's currently shown only in the terminal (and discarded) would be preserved in the file itself.
+Confidence decay (algorithmically reducing scores for unreinforced rules) is rejected. It introduces state management that conflicts with the "pure generated artifact" design principle, requires decay rate calibration with no clear right answer, and creates false positives for set-and-forget rules (e.g., WAL mode is always correct regardless of recent reinforcement).
 
-```markdown
-## Changelog
-
-### Apr 20, 2026 (142 sessions)
-- +2 rules: avoid-orm-migrations, prompt-cache-content-blocks
-- ~3 rules updated: confidence scores changed
-- +1 decision: Two-layer prompt quality output
-- Friction updated: stale-assumptions 19→23
-
-### Mar 15, 2026 (119 sessions)
-- Initial generation: 10 rules, 6 decisions
-```
-
-**Why it matters:** The file's evolution becomes readable without needing `git log`. A new developer can see "this file was last updated 3 months ago and added 4 rules since the initial generation." Adds context that the diff view can't provide to someone reading the file cold.
-
-**Trade-offs:**
-- Breaks the "pure generated artifact" mental model slightly — the changelog is computed content, not extracted knowledge
-- Adds to file size over time (though bounded by session history)
-- Regeneration must read the previous changelog section and append, not overwrite — tricky during full regeneration
-- Simpler alternative: keep it in git commit messages only; the file stays clean
-
-**Decision needed:** Preserve diff history in-file, or keep it git-only?
+**Shipped instead:** The `last_reinforced` date field (see Section 4.1 rule schema). Zero calibration needed. Developers and agents can judge per-rule freshness themselves. Same information surface; no algorithm.
 
 ---
 
-### 9.4 `--check` as a Pre-commit / CI Gate
+### 9.3 Inline Changelog — **Killed**
 
-**The idea:** `code-insights attach --check` is a zero-output, exit-code-only command for automated freshness enforcement. Returns exit code 0 if knowledge is fresh, exit code 1 if stale.
+Rejected unanimously. An inline changelog contradicts the "pure generated artifact" model that Section 4.5 defends at length. Full regeneration overwrites the file — preserving a changelog section requires partial preservation, which reintroduces exactly the merge complexity the spec rejected. Git provides this for free: `git log .code-insights.md`.
+
+---
+
+### 9.4 `--check` CI Staleness Gate — **Confirmed for Phase 1**
+
+**Verdict:** Include in Phase 1. Trivial to implement, zero LLM calls, direct SQLite read. Unique differentiator — CLAUDE.md, Cursor rules, and entire.io have no freshness enforcement mechanism.
+
+**Full specification:**
 
 ```bash
-# In .git/hooks/pre-commit or CI:
-code-insights attach --check --threshold 50
+# Usage in .git/hooks/pre-commit or CI pipeline:
+code-insights attach --check [--threshold <n>]
 
-# Output when stale:
+# Exit 0: knowledge is fresh
+# Exit 1 + message when stale:
 ⚠  .code-insights.md is stale (64 sessions since last generation, threshold: 50)
    Run: code-insights attach
 ```
 
-**Why it matters:** This turns the staleness signal into an actionable CI/pre-commit gate. Teams could enforce "re-generate before releasing" without any manual process. Pairs naturally with `--yes` flag for non-interactive CI regeneration.
+**Implementation:** Parse `sessions_at_generation` from the existing file's YAML frontmatter. Query current session count directly from SQLite (no server, no LLM). Compare. `--threshold` defaults to 50, configurable. If no `.code-insights.md` exists: exit 0 silently (gate only applies to committed files).
 
-**Already partially specified in 4.2** — this section confirms it as a meaningful standalone feature worth calling out explicitly.
-
-**Trade-offs:**
-- "Stale knowledge" → "blocked CI" may feel heavy-handed for some teams
-- The threshold (50 sessions) needs to be configurable and well-documented
-- Should only be enforced for team-committed files, not personal `.gitignore`'d ones
-
-**Decision needed:** Include in Phase 1 alongside the main command, or Phase 2 after usage patterns are established?
+**Key constraint:** `--check` only applies to files the user has committed (not `.gitignore`'d ones). Document this clearly so teams don't accidentally gate personal-only files.
 
 ---
 
@@ -958,14 +931,14 @@ code-insights attach --check --threshold 50
 | Update strategy | Full regeneration + diff preview; no merge/sentinels |
 | User-editable sections | None — custom rules go in CLAUDE.md |
 | Architecture placement | 5th export format, conditional branch on existing `/api/export/generate` |
-| Schema change | V10 adds `topic_tags` to insights + `knowledge_sync` table |
+| Schema change | V10 adds `topic_tags` to insights only; `knowledge_sync` deferred to Phase 3 `applyV11` |
 | Privacy | 3-layer scrubbing + dry-run mode + specific per-run warning |
 | Trigger | Explicit opt-in: `code-insights attach` / `export --format repo` |
 | Auto-generation | Never (no hooks, no post-reflect auto-write) |
 | Token budget | Max 80 insights to LLM; max 3000 output tokens; frontmatter uses full aggregations |
 | Section caps | 12 rules, 8 decisions, 5 friction, 6 patterns — enforced in code |
 | `--no-llm` mode | Uses pre-existing reflect snapshot `claudeMdRules[]`; skips export LLM call |
-| CLI invocation model | Transient server start → API call → shutdown (same as `reflect`) |
+| CLI invocation model | Open decision between Option A (require running server) and Option B (direct DB + CLI LLM provider). See Section 4.2 for full analysis. Recommendation: Option B. |
 | Diff computation | Client-side using `diff` package; server provides old content via GET endpoint |
 | Project fuzzy match | Show numbered list if ambiguous; never silently pick closest |
 | `.gitignore` prompt | After first write, ask commit/ignore/skip; default: commit |
