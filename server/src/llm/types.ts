@@ -44,6 +44,7 @@ export interface LLMResponse {
 
 export interface ChatOptions {
   signal?: AbortSignal;
+  temperature?: number;
 }
 
 export interface LLMClient {

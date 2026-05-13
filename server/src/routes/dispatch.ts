@@ -97,20 +97,17 @@ app.post('/generate', requireLLM(), async (c) => {
 
   const client = createLLMClient();
   const messages = [
+    { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: userMessage },
   ];
 
-  let response = await client.chat(messages, {
-    // temperature 0.7 is not a universal option in the LLMClient interface;
-    // providers use their own defaults — Sonnet defaults to 1.0
-    // We override via system prompt instructions for consistent output length
-  });
+  let response = await client.chat(messages, { temperature: 0.7 });
 
   let parsed = parseDispatchOutput(response.content);
 
   // Single retry on parse failure
   if (!parsed.ok) {
-    response = await client.chat(messages);
+    response = await client.chat(messages, { temperature: 0.7 });
     parsed = parseDispatchOutput(response.content);
 
     if (!parsed.ok) {

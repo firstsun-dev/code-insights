@@ -48,7 +48,7 @@ export function createLlamaCppClient(model: string, baseUrl?: string): LLMClient
               model,
               // flattenContent converts ContentBlock[] to string; strings pass through unchanged.
               messages: messages.map(m => ({ role: m.role, content: flattenContent(m.content) })),
-              temperature: 0.3,
+              temperature: options?.temperature ?? 0.3,
               max_tokens: 4096,
               // Grammar-constrained JSON output — llama-server honours OpenAI's response_format.
               response_format: { type: 'json_object' },

@@ -21,7 +21,7 @@ export function createGeminiClient(apiKey: string, model: string): LLMClient {
       const body: Record<string, unknown> = {
         contents,
         generationConfig: {
-          temperature: 0.7,
+          temperature: options?.temperature ?? 0.7,
           maxOutputTokens: 8192,
           // Force valid JSON output at the decoding level.
           // Without this, Gemini Flash often wraps JSON in markdown fences,
