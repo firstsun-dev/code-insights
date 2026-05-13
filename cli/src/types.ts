@@ -379,3 +379,36 @@ export interface FileSyncState {
   syncedSessionIds?: string[];  // For providers where 1 file = N sessions (e.g., Cursor SQLite)
 }
 
+// ── Dispatch feature (blog post generator) ───────────────────────────────────
+
+export type DispatchTone = 'technical' | 'accessible' | 'quick-tips';
+
+export interface DispatchInsight {
+  id: string;
+  type: string;
+  summary: string;
+  content: string;
+  bullets: string[];
+}
+
+export interface DispatchRequest {
+  insightIds: string[];
+  context: string;
+  tone: DispatchTone;
+}
+
+export interface DispatchResponse {
+  markdown: string;
+  frontmatter: {
+    title: string;
+    tags: string[];
+    tldr: string;
+  };
+  wordCount: number;
+  model: string;
+  tokensUsed: {
+    input: number;
+    output: number;
+  };
+}
+
