@@ -6,6 +6,7 @@ export interface MigrationResult {
   v7Applied: boolean;
   v8Applied: boolean;
   v9Applied: boolean;
+  v10Applied: boolean;
 }
 
 /**
@@ -21,6 +22,7 @@ export interface MigrationResult {
  * Version 7: Add analysis_usage table for tracking LLM analysis costs per session
  * Version 8: Add session_message_count to analysis_usage for resume detection
  * Version 9: Add analysis_queue table for async hook-triggered analysis
+ * Version 10: Add parent_session_id and agent_type columns to sessions for subagent hierarchy (Mistral Vibe)
  */
 export function runMigrations(db: Database.Database): MigrationResult {
   // Create schema_version table first if it doesn't exist.
@@ -78,7 +80,13 @@ export function runMigrations(db: Database.Database): MigrationResult {
     v9Applied = true;
   }
 
-  return { v6Applied, v7Applied, v8Applied, v9Applied };
+  let v10Applied = false;
+  if (currentVersion < 10) {
+    applyV10(db);
+    v10Applied = true;
+  }
+
+  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied };
 }
 
 function getCurrentVersion(db: Database.Database): number {
@@ -202,4 +210,21 @@ function applyV9(db: Database.Database): void {
     `CREATE INDEX IF NOT EXISTS idx_analysis_queue_enqueued_at ON analysis_queue(enqueued_at ASC)`
   );
   db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(9);
+}
+
+function applyV10(db: Database.Database): void {
+  // Add parent_session_id and agent_type for subagent hierarchy support (e.g., Mistral Vibe nested agents)
+  // Use try-catch since SQLite doesn't support ALTER TABLE ... IF NOT EXISTS
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN parent_session_id TEXT`);
+  } catch (e: any) {
+    if (!e.message?.includes('duplicate column')) throw e;
+  }
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN agent_type TEXT`);
+  } catch (e: any) {
+    if (!e.message?.includes('duplicate column')) throw e;
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_parent_id ON sessions(parent_session_id)`);
+  db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(10);
 }

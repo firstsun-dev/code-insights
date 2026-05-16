@@ -78,6 +78,8 @@ export interface ParsedSession {
   gitBranch: string | null;
   claudeVersion: string | null;
   sourceTool?: string;
+  parentSessionId?: string | null;  // For subagent sessions (e.g., Mistral Vibe nested agents)
+  agentType?: string | null;        // Type of agent for subagent sessions
   usage?: SessionUsage;
   messages: ParsedMessage[];
 }

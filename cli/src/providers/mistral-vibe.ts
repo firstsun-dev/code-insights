@@ -31,6 +31,8 @@ interface VibeMeta {
   };
   title?: string;
   total_messages?: number;
+  parent_session_id?: string; // For subagent sessions
+  agent_type?: string; // Type of subagent
 }
 
 interface VibeMessage {
@@ -40,6 +42,7 @@ interface VibeMessage {
   tool_call_id?: string;
   name?: string; // tool name
   injected?: boolean;
+  reasoning?: string; // Reasoning/thinking output
 }
 
 /**
@@ -64,37 +67,57 @@ export class MistralVibeProvider implements SessionProvider {
       return [];
     }
 
-    const sessionDirs = fs.readdirSync(baseDir);
     const discovered: string[] = [];
+    this.discoverRecursive(baseDir, discovered, options);
+    return discovered;
+  }
 
-    for (const dir of sessionDirs) {
-      if (!dir.startsWith('session_')) continue;
-
-      const fullPath = path.join(baseDir, dir);
-      if (!fs.statSync(fullPath).isDirectory()) continue;
-
-      const metaPath = path.join(fullPath, 'meta.json');
-      const messagesPath = path.join(fullPath, 'messages.jsonl');
-
-      if (fs.existsSync(metaPath) && fs.existsSync(messagesPath)) {
-        // Apply project filter if possible by reading meta.json
-        if (options?.projectFilter) {
-          try {
-            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as VibeMeta;
-            const projectPath = meta.environment?.working_directory || '';
-            const projectName = path.basename(projectPath);
-            if (!projectName.toLowerCase().includes(options.projectFilter.toLowerCase())) {
-              continue;
-            }
-          } catch (e) {
-            // If we can't read meta, we'll still include it and let parse() handle errors
-          }
-        }
-        discovered.push(fullPath);
-      }
+  /**
+   * Recursively discover session directories containing meta.json + messages.jsonl.
+   * Traverses into agents/ subdirectories to find nested subagent sessions.
+   */
+  private discoverRecursive(
+    currentDir: string,
+    discovered: string[],
+    options?: { projectFilter?: string }
+  ): void {
+    if (!fs.existsSync(currentDir) || !fs.statSync(currentDir).isDirectory()) {
+      return;
     }
 
-    return discovered;
+    const metaPath = path.join(currentDir, 'meta.json');
+    const messagesPath = path.join(currentDir, 'messages.jsonl');
+
+    // If this directory contains both meta.json and messages.jsonl, it's a session
+    if (fs.existsSync(metaPath) && fs.existsSync(messagesPath)) {
+      // Apply project filter if specified
+      if (options?.projectFilter) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as VibeMeta;
+          const projectPath = meta.environment?.working_directory || '';
+          const projectName = path.basename(projectPath);
+          if (!projectName.toLowerCase().includes(options.projectFilter.toLowerCase())) {
+            return; // Skip this session and its children
+          }
+        } catch (e) {
+          // If we can't read meta, include it anyway and let parse() handle errors
+        }
+      }
+      discovered.push(currentDir);
+    }
+
+    // Recursively traverse subdirectories
+    try {
+      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(currentDir, entry.name);
+          this.discoverRecursive(subPath, discovered, options);
+        }
+      }
+    } catch (e) {
+      // Silently skip directories we can't read
+    }
   }
 
   async parse(sessionDirPath: string): Promise<ParsedSession | null> {
@@ -167,15 +190,15 @@ export class MistralVibeProvider implements SessionProvider {
         }
 
         const { text, toolCalls } = this.parseContent(rawMsg.content);
-        
+
         const type = rawMsg.role === 'system' ? 'system' : (rawMsg.role === 'assistant' ? 'assistant' : 'user');
-        
+
         const parsedMsg: ParsedMessage = {
           id: rawMsg.message_id || `msg-${messages.length}`,
           sessionId,
           type,
           content: text,
-          thinking: null, // Mistral Vibe doesn't seem to separate thinking in logs yet
+          thinking: rawMsg.reasoning || null, // Extract reasoning if present
           toolCalls,
           toolResults: rawMsg.role === 'user' ? [...pendingToolResults] : [],
           usage: null, // Per-message usage not in messages.jsonl
@@ -261,6 +284,8 @@ export class MistralVibeProvider implements SessionProvider {
       gitBranch: meta.git_branch || null,
       claudeVersion: null,
       sourceTool: 'mistral-vibe',
+      parentSessionId: meta.parent_session_id || null,
+      agentType: meta.agent_type || null,
       usage,
       messages,
     };

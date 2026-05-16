@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   git_branch              TEXT,
   claude_version          TEXT,
   source_tool             TEXT NOT NULL DEFAULT 'claude-code',
+  parent_session_id       TEXT,
+  agent_type              TEXT,
   device_id               TEXT,
   device_hostname         TEXT,
   device_platform         TEXT,
@@ -128,6 +130,6 @@ CREATE TABLE IF NOT EXISTS usage_stats (
 );
 `;
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export { runMigrations } from './migrate.js';
