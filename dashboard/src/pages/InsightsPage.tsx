@@ -178,6 +178,14 @@ export default function InsightsPage() {
     const facetRow = facetsBySessionId.get(primarySession.id);
     if (!facetRow) return;
     const prefill = buildDispatchPrefill(primarySession, facetRow);
+
+    // Auto-select insights from this session so canGenerate passes on entry
+    const sessionInsights = insights
+      .filter((i) => i.session_id === primarySession.id)
+      .slice(0, MAX_DISPATCH_INSIGHTS);
+    setSelectedInsights(sessionInsights);
+    setSelectedIds(new Set(sessionInsights.map((i) => i.id)));
+
     setDispatchPrefill(prefill);
     setDrawerOpen(true);
     markDispatchOpened();

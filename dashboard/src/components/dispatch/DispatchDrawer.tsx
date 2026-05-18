@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   DndContext,
@@ -127,27 +127,17 @@ export function DispatchDrawer({
   const [includeSessionBackground, setIncludeSessionBackground] = useState(false);
   const [result, setResult] = useState<DispatchResponse | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const [titleValue, setTitleValue] = useState('');
 
-  // When drawer opens with a prefill, apply it
+  // When drawer opens with a prefill, apply it; when closed, reset transient state
   useEffect(() => {
     if (open && prefill) {
       setContext(prefill.contextMarkdown);
       setContextEdited(false);
       setFormat(prefill.format);
-      setTitleValue(prefill.title);
-      // Select all text in title input on next frame
-      requestAnimationFrame(() => {
-        if (titleInputRef.current) {
-          titleInputRef.current.focus();
-          titleInputRef.current.select();
-        }
-      });
     }
     if (!open) {
+      setContext('');
       setContextEdited(false);
-      setTitleValue('');
     }
   }, [open, prefill]);
 
@@ -212,22 +202,6 @@ export function DispatchDrawer({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-            {/* Title input — only shown when prefill provides session context */}
-            {prefill && (
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Post title
-                </label>
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  value={titleValue}
-                  onChange={(e) => setTitleValue(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
-            )}
-
             {/* Selected insights with drag-to-reorder */}
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
