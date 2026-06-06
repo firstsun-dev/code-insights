@@ -45,7 +45,7 @@ export class CodexNativeRunner implements AnalysisRunner {
         '--ephemeral',
         '--sandbox', 'read-only',
         '--skip-git-repo-check',
-        '--model', 'gpt-5.4',
+        '--model', 'gpt-5.5',
         '--output-last-message', outputFile,
       ];
 

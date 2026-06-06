@@ -366,6 +366,14 @@ export interface ClaudeInsightConfig {
   dashboard?: {
     port?: number;
     llm?: LLMProviderConfig;
+    analysis?: {
+      retrieval?: {
+        enabled?: boolean;
+        topK?: number;
+        similarityThreshold?: number;
+        sameProjectOnly?: boolean;
+      };
+    };
   };
   telemetry?: boolean;              // default true (opt-out)
 }

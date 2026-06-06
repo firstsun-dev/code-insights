@@ -74,11 +74,19 @@ export function buildCacheableConversationBlock(formattedMessages: string): Cont
  * Build the instruction suffix for session analysis.
  * Used as the second content block in the user message, after the cached conversation.
  */
+export interface RelatedInsight {
+  type: string;
+  title: string;
+  content: string;
+  confidence: number;
+}
+
 export function buildSessionAnalysisInstructions(
   projectName: string,
   sessionSummary: string | null,
   meta?: SessionMetadata,
-  loopSignal?: RageLoopSignal
+  loopSignal?: RageLoopSignal,
+  relatedInsights?: RelatedInsight[],
 ): string {
   const loopInfo = loopSignal?.detected
     ? `  <detected_signals>
@@ -90,6 +98,21 @@ export function buildSessionAnalysisInstructions(
   </detected_signals>\n`
     : '';
 
+  const relatedBlock = relatedInsights && relatedInsights.length > 0
+    ? '\n<related_insights>\n' +
+      relatedInsights.map((ri, i) =>
+        '  <insight index="' + (i + 1) + '">\n' +
+        '    <type>' + ri.type + '</type>\n' +
+        '    <title>' + ri.title + '</title>\n' +
+        '    <content>' + ri.content + '</content>\n' +
+        '    <confidence>' + ri.confidence + '</confidence>\n' +
+        '  </insight>'
+      ).join('\n') +
+      '\n</related_insights>\n\n<related_insights_instructions>\n' +
+      'These are insights from similar past sessions in the same project. Do NOT duplicate them. Instead, note if they reinforce or contradict the current session\'s patterns. If a related insight is directly relevant, reference it by index (e.g., "reinforces insight #2").\n' +
+      '</related_insights_instructions>\n'
+    : '';
+
   return `<task>
 Extract analytical session facets, decisions, and learnings from the provided session transcript into structured JSON.
 </task>
@@ -97,7 +120,7 @@ Extract analytical session facets, decisions, and learnings from the provided se
 <context>
   <project_name>${projectName}</project_name>
 ${sessionSummary ? `  <session_summary>${sessionSummary}</session_summary>\n` : ''}${loopInfo}  <system_metadata>${formatSessionMetaLine(meta)}</system_metadata>
-</context>
+</context>${relatedBlock}
 
 <rules>
   1. Enforce strict JSON output schema.
@@ -296,7 +319,8 @@ export function buildFacetOnlyInstructions(
   projectName: string,
   sessionSummary: string | null,
   meta?: SessionMetadata,
-  loopSignal?: RageLoopSignal
+  loopSignal?: RageLoopSignal,
+  relatedInsights?: RelatedInsight[],
 ): string {
   const loopInfo = loopSignal?.detected
     ? `  <detected_signals>
@@ -308,13 +332,28 @@ export function buildFacetOnlyInstructions(
   </detected_signals>\n`
     : '';
 
+  const relatedBlock = relatedInsights && relatedInsights.length > 0
+    ? '\n<related_insights>\n' +
+      relatedInsights.map((ri, i) =>
+        '  <insight index="' + (i + 1) + '">\n' +
+        '    <type>' + ri.type + '</type>\n' +
+        '    <title>' + ri.title + '</title>\n' +
+        '    <content>' + ri.content + '</content>\n' +
+        '    <confidence>' + ri.confidence + '</confidence>\n' +
+        '  </insight>'
+      ).join('\n') +
+      '\n</related_insights>\n\n<related_insights_instructions>\n' +
+      'These are insights from similar past sessions in the same project. Note if the current session\'s facets reinforce or contradict these patterns.\n' +
+      '</related_insights_instructions>\n'
+    : '';
+
   return `<task>
 Extract session facets for cross-session pattern analysis. Focus on holistic session execution, friction points, and effective workflow patterns.
 </task>
 
 <context>
   <project_name>${projectName}</project_name>
-${sessionSummary ? `  <session_summary>${sessionSummary}</session_summary>\n` : ''}${loopInfo}${formatSessionMetaLine(meta)}</context>
+${sessionSummary ? `  <session_summary>${sessionSummary}</session_summary>\n` : ''}${loopInfo}${formatSessionMetaLine(meta)}</context>${relatedBlock}
 
 <rules>
   1. Evaluate the session boundaries and overall progress explicitly.

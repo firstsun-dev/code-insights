@@ -7,3 +7,4 @@ export {
   buildPromptQualityInstructions,
   buildFacetOnlyInstructions,
 } from '@code-insights/cli/analysis/prompts';
+export type { RelatedInsight } from '@code-insights/cli/analysis/prompts';

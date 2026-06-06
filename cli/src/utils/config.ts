@@ -54,6 +54,10 @@ export function saveConfig(config: ClaudeInsightConfig): void {
       const { apiKey: _omitted, ...llmWithoutKey } = config.dashboard.llm;
       clean.dashboard.llm = llmWithoutKey;
     }
+    // Preserve dashboard.analysis sub-object (retrieval config, etc.)
+    if (config.dashboard?.analysis) {
+      clean.dashboard.analysis = { ...config.dashboard.analysis };
+    }
   }
   if (config.telemetry !== undefined) {
     clean.telemetry = config.telemetry;

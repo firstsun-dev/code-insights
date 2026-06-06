@@ -185,6 +185,54 @@ describe('config utilities', () => {
       });
     });
 
+    it('preserves dashboard.analysis.retrieval config fields', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const config = {
+        sync: { claudeDir: '/test/.claude/projects', excludeProjects: [] },
+        dashboard: {
+          analysis: {
+            retrieval: {
+              enabled: true,
+              topK: 3,
+              similarityThreshold: 0.80,
+              sameProjectOnly: false,
+            },
+          },
+        },
+      };
+
+      saveConfig(config);
+
+      const [, writtenContent] = vi.mocked(fs.writeFileSync).mock.calls[0];
+      const parsed = JSON.parse(writtenContent as string);
+      expect(parsed.dashboard.analysis.retrieval).toEqual({
+        enabled: true,
+        topK: 3,
+        similarityThreshold: 0.80,
+        sameProjectOnly: false,
+      });
+    });
+
+    it('preserves partial retrieval config (defaults for omitted fields)', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const config = {
+        sync: { claudeDir: '/test/.claude/projects', excludeProjects: [] },
+        dashboard: {
+          analysis: {
+            retrieval: { enabled: false },
+          },
+        },
+      };
+
+      saveConfig(config);
+
+      const [, writtenContent] = vi.mocked(fs.writeFileSync).mock.calls[0];
+      const parsed = JSON.parse(writtenContent as string);
+      expect(parsed.dashboard.analysis.retrieval).toEqual({ enabled: false });
+    });
+
     it('creates config directory when it does not exist', () => {
       // First call: existsSync for the dir check in ensureConfigDir -> false
       vi.mocked(fs.existsSync).mockReturnValue(false);

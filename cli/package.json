@@ -32,7 +32,10 @@
     "./analysis/analysis-usage-db": "./dist/analysis/analysis-usage-db.js",
     "./analysis/provider-runner": "./dist/analysis/provider-runner.js",
     "./analysis/schemas/session-analysis.json": "./dist/analysis/schemas/session-analysis.json",
-    "./analysis/schemas/prompt-quality.json": "./dist/analysis/schemas/prompt-quality.json"
+    "./analysis/schemas/prompt-quality.json": "./dist/analysis/schemas/prompt-quality.json",
+    "./embeddings/client": "./dist/embeddings/client.js",
+    "./embeddings/store": "./dist/embeddings/store.js",
+    "./embeddings/types": "./dist/embeddings/types.js"
   },
   "bin": {
     "code-insights": "./dist/index.js"
@@ -53,6 +56,9 @@
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
+  ],
+  "onlyBuiltDependencies": [
+    "@ax-llm/ax"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -84,15 +90,17 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@ax-llm/ax": "^22.0.2",
     "@hono/node-server": "^1.13.7",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "chalk": "^5.4.1",
     "commander": "^12.1.0",
     "hono": "^4.7.4",
     "inquirer": "^12.6.1",
-    "ora": "^8.2.0",
     "jsonrepair": "^3.13.2",
-    "posthog-node": "^4.18.0"
+    "ora": "^8.2.0",
+    "posthog-node": "^4.18.0",
+    "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

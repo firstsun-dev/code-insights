@@ -11,4 +11,5 @@ export type {
   PromptQualityTakeaway,
   PromptQualityDimensionScores,
   PromptQualityResponse,
+  RelatedInsight,
 } from '@code-insights/cli/analysis/prompt-types';

@@ -14,7 +14,9 @@ import { configCommand } from './commands/config.js';
 import { telemetryCommand } from './commands/telemetry.js';
 import { reflectCommand } from './commands/reflect.js';
 import { insightsCommand, insightsCheckCommand } from './commands/insights.js';
+import { buildOptimizeCommand } from './commands/optimize.js';
 import { buildQueueCommand } from './commands/queue.js';
+import { buildEmbeddingsCommand } from './commands/embeddings.js';
 import { sessionEndCommand } from './commands/session-end.js';
 import { showTelemetryNoticeIfNeeded } from './utils/telemetry.js';
 
@@ -121,6 +123,8 @@ program.addCommand(configCommand);
 program.addCommand(telemetryCommand);
 program.addCommand(reflectCommand);
 program.addCommand(buildQueueCommand());
+program.addCommand(buildEmbeddingsCommand());
+program.addCommand(buildOptimizeCommand());
 
 program
   .command('session-end')

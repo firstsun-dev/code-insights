@@ -74,6 +74,16 @@ function showConfigAction(): void {
     }
   }
 
+  // Retrieval config (RAG for insight generation)
+  if (config.dashboard?.analysis?.retrieval) {
+    const r = config.dashboard.analysis.retrieval;
+    console.log(chalk.white('\n  Retrieval (insight RAG):'));
+    console.log(chalk.gray(`    Enabled:    ${r.enabled !== false ? 'yes' : 'no'}`));
+    console.log(chalk.gray(`    Top-K:      ${r.topK ?? 5}`));
+    console.log(chalk.gray(`    Threshold:  ${r.similarityThreshold ?? 0.75}`));
+    console.log(chalk.gray(`    Same-proj:  ${r.sameProjectOnly !== false ? 'yes' : 'no'}`));
+  }
+
   // Telemetry — default is enabled; env vars can override at runtime
   console.log(chalk.white('\n  Telemetry:'));
   const telemetryEnabled = config.telemetry !== false;

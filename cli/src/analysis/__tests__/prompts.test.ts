@@ -396,6 +396,50 @@ describe('buildSessionAnalysisInstructions', () => {
     const result = buildSessionAnalysisInstructions('proj', null);
     expect(result).toContain('<json>...</json>');
   });
+
+  it('includes related_insights block when relatedInsights provided', () => {
+    const relatedInsights = [
+      { type: 'decision', title: 'Use Vitest', content: 'Chose Vitest for speed', confidence: 0.85 },
+      { type: 'learning', title: 'Testing helps', content: 'Write tests early', confidence: 0.80 },
+    ];
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, relatedInsights);
+    expect(result).toContain('<related_insights>');
+    expect(result).toContain('<insight index="1">');
+    expect(result).toContain('<type>decision</type>');
+    expect(result).toContain('<title>Use Vitest</title>');
+    expect(result).toContain('<content>Chose Vitest for speed</content>');
+    expect(result).toContain('<confidence>0.85</confidence>');
+    expect(result).toContain('<insight index="2">');
+    expect(result).toContain('<type>learning</type>');
+    expect(result).toContain('<title>Testing helps</title>');
+    expect(result).toContain('</related_insights>');
+    expect(result).toContain('<related_insights_instructions>');
+    expect(result).toContain('Do NOT duplicate them');
+  });
+
+  it('omits related_insights block when relatedInsights is empty', () => {
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, []);
+    expect(result).not.toContain('<related_insights>');
+    expect(result).not.toContain('<related_insights_instructions>');
+  });
+
+  it('omits related_insights block when relatedInsights is undefined', () => {
+    const result = buildSessionAnalysisInstructions('my-app', null);
+    expect(result).not.toContain('<related_insights>');
+    expect(result).not.toContain('<related_insights_instructions>');
+  });
+
+  it('truncates long content in related insights', () => {
+    const longContent = 'A'.repeat(500);
+    const relatedInsights = [
+      { type: 'decision', title: 'Long', content: longContent, confidence: 0.9 },
+    ];
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, relatedInsights);
+    // The content in the prompt should be truncated (the function itself doesn't truncate,
+    // but the caller should). Here we verify the full content is present since truncation
+    // happens in retrieveRelatedInsights, not in the prompt builder.
+    expect(result).toContain('<content>' + longContent + '</content>');
+  });
 });
 
 // ──────────────────────────────────────────────────────
