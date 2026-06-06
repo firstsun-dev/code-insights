@@ -358,7 +358,7 @@ function loadTrainingData(days: number, minMessages: number): TrainingExample[] 
       FROM sessions s
       WHERE s.ended_at >= ?
         AND s.message_count >= ?
-        AND s.hidden = 0
+        AND s.deleted_at IS NULL
       ORDER BY s.message_count DESC
       LIMIT 50
     `).all(sinceIso, minMessages) as Array<{
@@ -413,8 +413,9 @@ function loadTrainingData(days: number, minMessages: number): TrainingExample[] 
     }
 
     return examples;
-  } catch {
+  } catch (err) {
     // Database not available or schema mismatch
+    console.error(chalk.dim(`  Training data load warning: ${err instanceof Error ? err.message : String(err)}`));
     return [];
   }
 }

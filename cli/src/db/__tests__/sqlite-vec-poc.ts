@@ -26,7 +26,7 @@ async function embed(text: string): Promise<Float32Array> {
     body: JSON.stringify({ model: EMBED_MODEL, input: text }),
   });
   if (!res.ok) throw new Error(`Ollama embed failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
+  const data = await res.json() as { embeddings: number[][] };
   return new Float32Array(data.embeddings[0]);
 }
 

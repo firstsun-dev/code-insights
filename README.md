@@ -24,7 +24,10 @@ Code Insights is a local-first analytics platform designed to extract structured
 - **Cross-Session Pattern Synthesis** — Identifies recurring friction points and effective patterns across weeks of work.
 - **Rule Generation** — Automatically exports high-signal patterns as custom rules for your `CLAUDE.md` or `.cursorrules`.
 - **Zero-Cost Local Analysis** — Native support for Ollama allows for full AI analysis using local models like Llama 3.
-- **Privacy by Architecture** — Persistence is handled via a local SQLite database at `~/.code-insights/data.db`; no accounts or cloud sync required. Schema V9 ensures robust background processing and content-aware updates.
+- **Semantic Embeddings** — Vector-based embeddings via Ollama (`embeddinggemma:latest`, 768-dim) enable KNN similarity search over insights and messages, with sqlite-vec for fast local retrieval.
+- **Prompt Optimization (GEPA)** — Automatically evolve insight-generation prompts using multi-objective optimization (coverage, precision, actionability, brevity) powered by `@ax-llm/ax`.
+- **Vector-Based Recurring Insights** — Replaces expensive LLM-only clustering with sqlite-vec KNN + MMR deduplication; LLM is used only for theme naming (~90% token reduction).
+- **Privacy by Architecture** — Persistence is handled via a local SQLite database at `~/.code-insights/data.db`; no accounts or cloud sync required. Schema V11 adds vector table support and embedding status tracking.
 
 ## Supported AI Tools
 
@@ -135,6 +138,60 @@ code-insights reflect --week 2026-W13
 code-insights sync --source cursor && code-insights dashboard
 ```
 
+## Embeddings & Semantic Search
+
+Vector embeddings enable KNN similarity search over your insights and messages. Requires an Ollama instance with an embedding model.
+
+```bash
+# Backfill pending embeddings (insights, messages, or both)
+code-insights embeddings backfill
+code-insights embeddings backfill --entity insights
+code-insights embeddings backfill --entity messages
+
+# Show embedding coverage and vector index stats
+code-insights embeddings status
+
+# Force re-compute stale embeddings
+code-insights embeddings recompute --all
+
+# KNN similarity search (for testing/debugging)
+code-insights embeddings search "how to handle auth"
+code-insights embeddings search "error handling patterns" --top-k 10
+```
+
+**Ollama configuration:**
+- Set `OLLAMA_BASE_URL` environment variable (default: `http://tinybot:11434`)
+- Default embedding model: `embeddinggemma:latest` (768-dim)
+
+## Prompt Optimization (GEPA)
+
+Automatically evolve insight-generation prompts using multi-objective optimization powered by `@ax-llm/ax`.
+
+```bash
+# Run optimization on your session data
+code-insights optimize run
+
+# Customize student/teacher models
+code-insights optimize run --provider openai --student-model gpt-4o-mini --teacher-model claude-sonnet-4-20250514
+
+# Show current optimization state
+code-insights optimize status
+
+# List, apply, compare, and delete versions
+code-insights optimize list
+code-insights optimize apply <version-id>
+code-insights optimize compare
+code-insights optimize delete <version-id>
+```
+
+**Optimization objectives (scored 0-1):**
+- **Coverage** — % of session content captured in generated insights
+- **Precision** — % of insights that are non-trivial (not filler)
+- **Actionability** — % of insights with concrete, actionable takeaways
+- **Brevity** — inverse of total insight token count (normalized)
+
+**Supported providers:** `openai`, `anthropic`, `mistral`, `deepseek`, `cohere`, `google-gemini`
+
 ## Configuration File
 
 The system maintains its state and preferences in `~/.code-insights/config.json`. While most configuration is handled via the CLI, you can manually adjust settings for custom LLM providers or dashboard ports.
@@ -184,9 +241,16 @@ Session Sources (Claude, Cursor, Copilot, Gemini CLI, Hermes, OpenCode, Crush)
       └──────┬──────┘
              │
              ▼
-      ┌─────────────┐
-      │ SQLite DB   │  ~/.code-insights/data.db
-      └──────┬──────┘
+      ┌─────────────────────────────────────┐
+      │ SQLite DB (V11)                     │  ~/.code-insights/data.db
+      │  ┌──────────┐  ┌──────────────────┐ │
+      │  │ Tables   │  │ Vector Tables    │ │
+      │  │ projects │  │ vec_insights     │ │
+      │  │ sessions │  │ vec_messages     │ │
+      │  │ messages │  │ (sqlite-vec KNN) │ │
+      │  │ insights │  └──────────────────┘ │
+      │  └──────────┘                       │
+      └──────┬──────────────────────────────┘
              │
       ┌──────┴───────────────┐
       ▼                      ▼
@@ -198,20 +262,18 @@ Session Sources (Claude, Cursor, Copilot, Gemini CLI, Hermes, OpenCode, Crush)
                       ┌──────────────┐
                       │ React SPA    │  Visual Dashboard
                       └──────────────┘
+
+── External Services (optional) ──
+┌────────────┐  ┌──────────────┐  ┌─────────────┐
+│ Ollama     │  │ LLM Provider │  │ GEPA        │
+│ Embeddings │  │ (Analysis)   │  │ Optimization│
+│ (768-dim)  │  │              │  │ (@ax-llm/ax)│
+└────────────┘  └──────────────┘  └─────────────┘
 ```
 
 ## Privacy
 
 Code Insights is built on a "local-first" philosophy. All session data, metadata, and derived insights are stored in a local SQLite database. Telemetry is limited to anonymous usage metrics and can be disabled via `code-insights telemetry disable`. LLM analysis content is sent only to your configured provider via their official SDKs.
-
-## Contributing
-
-Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on the monorepo structure and local development setup.
-
-## License
-
-MIT — Copyright (c) 2026 melagiri
-ider via their official SDKs.
 
 ## Contributing
 

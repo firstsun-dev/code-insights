@@ -90,6 +90,39 @@ const EVIDENCE_PATTERNS = [
   /function|class|method|module|component|service/i,
 ];
 
+/**
+ * Defensive normalization of `prediction.insights`.
+ *
+ * AxFlow's parser can return the parsed value in several shapes depending
+ * on how the LLM formatted its response:
+ *   - Array of insight objects (the contract we want)
+ *   - Object with an `insights` array (the whole JSON envelope, when the
+ *     LLM returned one combined object — this is the crash case)
+ *   - null / undefined (no field extracted at all)
+ *   - Anything else (string, number, etc.)
+ *
+ * This helper is the single chokepoint so every objective function
+ * receives a clean array. If AxFlow's parser is ever fixed or the
+ * program shape changes, this is the one place to update.
+ */
+function normalizeInsights(prediction: InsightOutput | undefined | null): NonNullable<InsightOutput['insights']> {
+  const raw = prediction?.insights;
+
+  if (Array.isArray(raw)) return raw;
+
+  if (raw && typeof raw === 'object') {
+    // The Ax prompt template renders field titles in Title Case
+    // (e.g., "Insights" not "insights"). The LLM faithfully returns
+    // JSON keyed by the Title Case name it was shown. Both shapes
+    // must be handled — this is the enum-drift defense.
+    const obj = raw as Record<string, unknown>;
+    const arr = obj.insights ?? obj.Insights ?? obj.items ?? obj.Items;
+    if (Array.isArray(arr)) return arr as NonNullable<InsightOutput['insights']>;
+  }
+
+  return [];
+}
+
 // ── Individual objective functions ────────────────────────────────────────────
 
 /**
@@ -104,7 +137,7 @@ function scoreCoverage(prediction: InsightOutput, example: MetricInput['example'
     return clamp01(example.humanQuality);
   }
 
-  const insights = prediction.insights ?? [];
+  const insights = normalizeInsights(prediction);
   if (insights.length === 0) return 0;
 
   // If we have expected topics, check how many appear in the insights
@@ -133,7 +166,7 @@ function scoreCoverage(prediction: InsightOutput, example: MetricInput['example'
  * Penalizes generic, low-signal findings. Rewards specific, evidence-backed insights.
  */
 function scorePrecision(prediction: InsightOutput): number {
-  const insights = prediction.insights ?? [];
+  const insights = normalizeInsights(prediction);
   if (insights.length === 0) return 0;
 
   let nonTrivialCount = 0;
@@ -170,7 +203,7 @@ function scorePrecision(prediction: InsightOutput): number {
  * Rewards insights that suggest specific actions, patterns, or changes.
  */
 function scoreActionability(prediction: InsightOutput): number {
-  const insights = prediction.insights ?? [];
+  const insights = normalizeInsights(prediction);
   if (insights.length === 0) return 0;
 
   let actionableCount = 0;
@@ -206,7 +239,7 @@ function scoreActionability(prediction: InsightOutput): number {
  *   - > 800 tokens: 0.05
  */
 function scoreBrevity(prediction: InsightOutput): number {
-  const insights = prediction.insights ?? [];
+  const insights = normalizeInsights(prediction);
   if (insights.length === 0) return 0;
 
   // Estimate token count (rough: 1 token ≈ 4 chars for English text)

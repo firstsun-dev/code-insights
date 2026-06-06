@@ -62,6 +62,97 @@ describe('multiObjectiveMetric', () => {
     expect(scores.brevity).toBe(0);
   });
 
+  it('does not crash when insights is the whole JSON envelope object', () => {
+    // Regression: AxFlow's parser can return the entire parsed JSON
+    // object (containing both `insights` and `quality`) under
+    // `prediction.insights` when the LLM returns one combined object.
+    // The metric must unwrap it to the inner array.
+    const input: MetricInput = {
+      prediction: {
+        insights: {
+          insights: [
+            {
+              category: 'debugging-pattern',
+              description: 'Check null guards in auth.ts before accessing session.userId',
+              confidence: 85,
+              evidence: ['User#3: Getting null pointer in auth.ts'],
+            },
+          ],
+          quality: 0.85,
+        },
+        quality: 0.5,
+      },
+      example: {
+        sessionData: 'some session data about null guards',
+        sessionTopics: ['null', 'auth'],
+      },
+    };
+
+    const scores = multiObjectiveMetric(input);
+
+    // Should not throw, all scores in [0,1]
+    for (const [key, value] of Object.entries(scores)) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+    // At least one objective should score > 0 since we have a real insight
+    expect(scores.precision).toBeGreaterThan(0);
+  });
+
+  it('does not crash when insights is wrapped with Title Case key "Insights"', () => {
+    // Regression: Ax prompt template renders field titles in Title Case
+    // ("Insights" not "insights"). The LLM faithfully follows this,
+    // returning {"Insights": [...]} instead of {"insights": [...]}.
+    // normalizeInsights must handle both — this is the enum-drift defense.
+    const input: MetricInput = {
+      prediction: {
+        insights: {
+          Insights: [
+            {
+              category: 'architecture-decision',
+              description: 'Chose monorepo structure for shared types across packages',
+              confidence: 85,
+              evidence: ["User#3: Let's use a monorepo"],
+            },
+          ],
+        },
+        quality: 0.85,
+      },
+      example: {
+        sessionData: "User#3: Let's use a monorepo. Assistant#4: Good idea.",
+        sessionTopics: ['monorepo', 'architecture'],
+      },
+    };
+
+    const scores = multiObjectiveMetric(input);
+
+    // Should not throw, all scores in [0,1]
+    for (const [key, value] of Object.entries(scores)) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+    // Coverage should be > 0 because the insight references session topics
+    expect(scores.coverage).toBeGreaterThan(0);
+    expect(scores.precision).toBeGreaterThan(0);
+  });
+
+  it('does not crash when insights is undefined or null', () => {
+    const inputs: MetricInput[] = [
+      { prediction: { insights: undefined as any, quality: 0 }, example: { sessionData: 'x' } },
+      { prediction: { insights: null as any, quality: 0 }, example: { sessionData: 'x' } },
+      { prediction: { insights: 'a string' as any, quality: 0 }, example: { sessionData: 'x' } },
+      { prediction: { insights: 42 as any, quality: 0 }, example: { sessionData: 'x' } },
+    ];
+
+    for (const input of inputs) {
+      const scores = multiObjectiveMetric(input);
+      expect(scores.coverage).toBe(0);
+      expect(scores.precision).toBe(0);
+      expect(scores.actionability).toBe(0);
+      expect(scores.brevity).toBe(0);
+    }
+  });
+
   it('scores high precision for specific, evidence-backed insights', () => {
     const input: MetricInput = {
       prediction: {
@@ -276,6 +367,25 @@ describe('createInsightProgram', () => {
     // AxGen instances have a forward method
     expect(typeof program.forward).toBe('function');
   });
+
+  it('includes the output format in its description (regression: parser-contract)', () => {
+    // Regression: the Ax signature only carries a single `description`
+    // field. The output format MUST be concatenated into that field or
+    // the LLM has no idea what shape to emit, and AxFlow's vs() parser
+    // extracts nothing — every metric then scores 0.
+    const program = createInsightProgram() as unknown as Record<string, unknown>;
+
+    // Drill into the program signature to find the description string.
+    // Ax stores it under program.signature.description.
+    const signature = (program as { signature?: { description?: string } }).signature;
+    const description = signature?.description ?? '';
+
+    // The combined instruction must include the output format so the
+    // LLM knows to emit "Insights: ..." and "Quality: ..." blocks.
+    expect(description).toContain(INSIGHT_INSTRUCTION);
+    expect(description).toContain('Insights:');
+    expect(description).toContain('Quality:');
+  });
 });
 
 describe('INSIGHT_INSTRUCTION', () => {
@@ -298,9 +408,18 @@ describe('INSIGHT_OUTPUT_FORMAT', () => {
     expect(INSIGHT_OUTPUT_FORMAT.length).toBeGreaterThan(0);
   });
 
-  it('contains JSON structure hints', () => {
-    expect(INSIGHT_OUTPUT_FORMAT).toContain('json');
+  it('contains field-prefixed blocks that match AxFlow parser', () => {
+    // Regression: AxFlow's vs() parser scans for `Insights:` and `Quality:`
+    // prefixes in the LLM response. The format MUST contain these
+    // field-title prefixes or the parser will fail to extract the fields.
+    expect(INSIGHT_OUTPUT_FORMAT).toContain('Insights:');
+    expect(INSIGHT_OUTPUT_FORMAT).toContain('Quality:');
     expect(INSIGHT_OUTPUT_FORMAT).toContain('insights');
+  });
+
+  it('does NOT use a single <json> envelope (AxFlow 22.0.2 does not understand it)', () => {
+    expect(INSIGHT_OUTPUT_FORMAT).not.toContain('<json>');
+    expect(INSIGHT_OUTPUT_FORMAT).not.toContain('</json>');
   });
 });
 

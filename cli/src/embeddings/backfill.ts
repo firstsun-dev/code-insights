@@ -9,7 +9,7 @@ import {
   createAllVectorTables,
   insertEmbeddingsBatch,
 } from './store.js';
-import type { EmbeddingEntityType, BackfillStats } from './types.js';
+import type { EmbeddingEntityType, BackfillStats, EmbeddingResult } from './types.js';
 import type Database from 'better-sqlite3';
 
 /** Construct the source text that gets embedded for an insight. */

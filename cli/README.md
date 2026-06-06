@@ -296,6 +296,70 @@ code-insights embeddings search "error handling patterns" --top-k 10
 - Set `OLLAMA_BASE_URL` environment variable to point to your Ollama instance (default: `http://tinybot:11434`)
 - The default embedding model is `embeddinggemma:latest` (768-dim)
 
+### Prompt Optimization (GEPA)
+
+Automatically evolve insight-generation prompts using multi-objective optimization powered by `@ax-llm/ax`. This uses the GEPA (Genetic-Pareto) algorithm to find prompt variants that maximize coverage, precision, actionability, and brevity.
+
+```bash
+# Run GEPA optimization on insight generation prompts
+code-insights optimize run
+
+# Customize providers, models, and parameters
+code-insights optimize run \
+  --provider openai \
+  --student-model gpt-4o-mini \
+  --teacher-model claude-sonnet-4-20250514 \
+  --trials 25 \
+  --max-calls 200 \
+  --days 30
+
+# Show current optimization state (active version, scores, convergence)
+code-insights optimize status
+
+# List all optimization versions
+code-insights optimize list
+
+# Apply an optimized prompt version (used for future insight generation)
+code-insights optimize apply <version-id>
+
+# A/B compare two prompt versions (default: active vs latest)
+code-insights optimize compare
+code-insights optimize compare <version-a> <version-b>
+
+# Delete an optimization version
+code-insights optimize delete <version-id>
+```
+
+**How it works:**
+1. Training data is loaded from your synced sessions (last N days, min messages filter)
+2. A fast/cheap **student model** generates insights; a strong **teacher model** evaluates them
+3. GEPA evolves prompt variants using a multi-objective metric (coverage, precision, actionability, brevity)
+4. Results are saved to `~/.code-insights/optimizations/<version-id>/` Pareto frontier artifacts
+5. Apply a version to use it for future insight generation
+
+**Optimization objectives (scored 0-1):**
+| Objective | Description |
+|-----------|-------------|
+| `coverage` | % of session content captured in generated insights |
+| `precision` | % of insights that are non-trivial (not filler) |
+| `actionability` | % of insights with concrete, actionable takeaways |
+| `brevity` | inverse of total insight token count (normalized) |
+
+**Supported providers:** `openai`, `anthropic`, `mistral`, `deepseek`, `cohere`, `google-gemini`
+
+**Common flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--provider` | LLM provider for both student and teacher | `openai` |
+| `--student-model` | Fast/cheap model for generating insights | `gpt-4o-mini` |
+| `--teacher-model` | Strong model for evaluation | `claude-sonnet-4-20250514` |
+| `--trials` | Number of optimization trials | `25` |
+| `--seed` | Random seed for reproducibility | `42` |
+| `--max-calls` | Max metric calls (cost bound) | `200` |
+| `--minibatch` | Minibatch size for GEPA | `6` |
+| `--days` | Use sessions from last N days for training | `30` |
+| `--min-messages` | Minimum messages per session | `10` |
+
 ### Hook Integration
 
 ```bash
@@ -341,7 +405,7 @@ CODE_INSIGHTS_TELEMETRY_DISABLED=1 code-insights sync
 
 ## LLM Configuration
 
-Session analysis (summaries, decisions, learnings, facets) and Reflect synthesis require an LLM provider. Configure it via CLI or the dashboard Settings page.
+Session analysis (summaries, decisions, learnings, facets), Reflect synthesis, and GEPA prompt optimization require an LLM provider. Configure it via CLI or the dashboard Settings page.
 
 ```bash
 code-insights config llm
@@ -357,6 +421,10 @@ code-insights config llm
 | Ollama | llama3.2, qwen2.5-coder, etc. | No (local) |
 
 API keys are stored in `~/.code-insights/config.json` (mode 0o600, readable only by you).
+
+**New dependencies (v4.7.0):**
+- `@ax-llm/ax` — GEPA prompt optimization framework
+- `sqlite-vec` — Vector similarity search extension for SQLite
 
 ## Troubleshooting
 
