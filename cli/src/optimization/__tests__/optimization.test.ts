@@ -470,24 +470,31 @@ import {
   compareVersions,
   listVersions,
   hasOptimizedPrompt,
+  _setOptimizationDir,
   type OptimizationManifest,
   type OptimizationVersion,
 } from '../../optimization/prompts.js';
 
-const TEST_DIR = path.join(homedir(), '.code-insights', 'optimizations');
+// Use an isolated temp directory for each test run to avoid races
+// with other test suites (e.g. runner.test.ts) that also hit disk.
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+
+const TEST_DIR = mkdtempSync(path.join(tmpdir(), 'ci-opt-test-'));
+_setOptimizationDir(TEST_DIR);
 
 describe('prompt versioning', () => {
   beforeEach(() => {
     // Clean up test directory
     if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
 
   afterEach(() => {
     // Clean up test directory
     if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
 
