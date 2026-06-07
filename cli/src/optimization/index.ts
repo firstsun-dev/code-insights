@@ -24,9 +24,13 @@ export {
 export {
   createGEPARunner,
   runGEPAOptimization,
+  GEPARunner,
   type GEPARunnerConfig,
   type TrainingExample,
   type GEPARunnerResult,
+  type OptimizationLogEntry,
+  type OptimizationStep,
+  type OptimizationLogger,
 } from './runner.js';
 
 export {
@@ -53,3 +57,21 @@ export {
   type OptimizationScores,
   type OptimizationMetadata,
 } from './prompts.js';
+
+// ── Template exports ─────────────────────────────────────────────────────────
+
+export {
+  DEFAULT_TEMPLATE_CONFIG,
+  TEACHER_SYSTEM_PROMPT,
+  TEACHER_EVALUATION_PROMPT,
+  STUDENT_SYSTEM_PROMPT,
+  STUDENT_MUTATION_PROMPT,
+  INSTRUCTION_INVARIANTS,
+  fillTemplate,
+  validateInstruction,
+  buildTeacherPrompt,
+  buildStudentPrompt,
+  type TemplateConfig,
+  type TeacherFeedbackSchema,
+  type ObjectiveFeedback,
+} from './templates.js';

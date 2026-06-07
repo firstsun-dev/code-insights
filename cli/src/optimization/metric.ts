@@ -73,6 +73,34 @@ const ACTIONABLE_PATTERNS = [
   /make sure/i,
   /always /i,
   /never /i,
+  // Descriptive-but-valuable patterns that imply action without explicit imperatives
+  /pattern: /i,
+  /key (takeaway|insight|finding)/i,
+  /lesson( learned)?/i,
+  /bottleneck/i,
+  /risk (of|when|if)/i,
+  /memory leak/i,
+  /race condition/i,
+  /single (point of failure|responsibility)/i,
+  /separation of concerns/i,
+  /tightly coupled/i,
+  /circular dependency/i,
+  /anti[- ]pattern/i,
+  /code smell|design smell|architecture smell/i,
+  /technical debt/i,
+  /workaround/i,
+  /scal(e|ing) (issue|problem|concern|limit)/i,
+  /performance (impact|issue|concern|penalty)/i,
+  /security (risk|concern|vulnerability|issue)/i,
+  /error[- ]handling/i,
+  /edge case/i,
+  /null(able)? (check|guard|reference)/i,
+  /missing (test|validation|error|type|check)/i,
+  /unnecessary (coupling|abstraction|complexity|dependency)/i,
+  /can (lead to|result in|cause)/i,
+  /leads? to/i,
+  /causes?/i,
+  /results? in/i,
 ];
 
 /**
@@ -289,11 +317,11 @@ function clamp01(value: number): number {
  * Scalarize multi-objective scores into a single weighted score.
  * Useful for selecting a single "best" prompt from the Pareto frontier.
  *
- * Default weights favor coverage and precision over brevity.
+ * Default weights favor coverage and precision over actionability and brevity.
  */
 export function scalarizeScores(
   scores: Record<string, number>,
-  weights: Record<string, number> = { coverage: 0.35, precision: 0.30, actionability: 0.20, brevity: 0.15 }
+  weights: Record<string, number> = { coverage: 0.40, precision: 0.30, actionability: 0.10, brevity: 0.15 }
 ): number {
   let totalWeight = 0;
   let weightedSum = 0;
