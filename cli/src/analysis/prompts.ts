@@ -343,7 +343,7 @@ export function buildFacetOnlyInstructions(
         '  </insight>'
       ).join('\n') +
       '\n</related_insights>\n\n<related_insights_instructions>\n' +
-      'These are insights from similar past sessions in the same project. Note if the current session\'s facets reinforce or contradict these patterns.\n' +
+      'These are insights from similar past sessions in the same project. Do NOT duplicate them. Instead, note if the current session\'s facets reinforce or contradict these patterns.\n' +
       '</related_insights_instructions>\n'
     : '';
 
