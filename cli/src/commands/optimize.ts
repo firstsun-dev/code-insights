@@ -7,10 +7,12 @@
  *   code-insights optimize apply <id>       Apply an optimized prompt
  *   code-insights optimize compare          A/B compare two prompt versions
  *   code-insights optimize list             List all optimization versions
+ *   code-insights optimize delete <id>      Delete an optimization version
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import ora from 'ora';
 import { getDb } from '../db/client.js';
 import { loadConfig } from '../utils/config.js';
 import { runGEPAOptimization, createGEPARunner } from '../optimization/runner.js';
@@ -22,6 +24,7 @@ import {
   compareVersions,
   loadScores,
   loadMetadata,
+  loadManifest,
   hasOptimizedPrompt,
 } from '../optimization/prompts.js';
 import type { TrainingExample } from '../optimization/runner.js';
@@ -102,6 +105,7 @@ async function runOptimize(opts: {
   quiet: boolean;
 }): Promise<void> {
   const log = opts.quiet ? () => {} : console.log;
+  const spinner = opts.quiet ? null : ora();
 
   log(chalk.cyan('\n  Code Insights — GEPA Prompt Optimization\n'));
 
@@ -128,16 +132,29 @@ async function runOptimize(opts: {
   }
 
   // 2. Load training data from sessions
+  if (spinner) spinner.start('Loading training data from sessions...');
   log(chalk.white('  Loading training data from sessions...'));
-  const trainingData = loadTrainingData(parseInt(opts.days, 10), parseInt(opts.minMessages, 10));
+
+  let trainingData: TrainingExample[];
+  try {
+    trainingData = loadTrainingData(parseInt(opts.days, 10), parseInt(opts.minMessages, 10));
+  } catch (err) {
+    if (spinner) spinner.fail('Failed to load training data');
+    console.error(chalk.red(`\n  Error loading training data: ${err instanceof Error ? err.message : String(err)}`));
+    console.error(chalk.dim('  Run `code-insights sync` first to import sessions.'));
+    console.error('');
+    process.exit(1);
+  }
 
   if (trainingData.length === 0) {
+    if (spinner) spinner.fail('No training data available');
     console.error(chalk.red('\n  Error: No sessions found for training.'));
     console.error(chalk.dim('  Run `code-insights sync` first to import sessions.'));
     console.error('');
     process.exit(1);
   }
 
+  if (spinner) spinner.succeed(`Loaded ${trainingData.length} training examples`);
   log(chalk.green(`  Loaded ${trainingData.length} training examples`));
 
   // 3. Split into train/validation (80/20)
@@ -147,12 +164,17 @@ async function runOptimize(opts: {
 
   log(chalk.dim(`  Train: ${trainSet.length}, Validation: ${valSet.length}`));
 
-  // 4. Run GEPA optimization
+  // 4. Run GEPA optimization with progress spinner
   log(chalk.white('\n  Running GEPA optimization...'));
   log(chalk.dim(`  Student: ${opts.provider}/${opts.studentModel}`));
   log(chalk.dim(`  Teacher: ${opts.provider}/${opts.teacherModel}`));
   log(chalk.dim(`  Trials: ${opts.trials}, Seed: ${opts.seed}`));
   log('');
+
+  if (spinner) {
+    spinner.start('Initializing GEPA optimizer...');
+    spinner.text = `Optimizing prompts (${opts.trials} trials)...`;
+  }
 
   try {
     const result = await runGEPAOptimization(trainSet, valSet, {
@@ -166,6 +188,8 @@ async function runOptimize(opts: {
       minibatchSize: parseInt(opts.minibatch, 10),
       verbose: !opts.quiet,
     });
+
+    if (spinner) spinner.succeed('Optimization complete!');
 
     // 5. Display results
     log(chalk.green('\n  Optimization complete!\n'));
@@ -186,7 +210,28 @@ async function runOptimize(opts: {
     log(chalk.dim(`\n  Artifact saved to ~/.code-insights/optimizations/${result.versionId}/`));
     log('');
   } catch (err) {
-    console.error(chalk.red(`\n  Optimization failed: ${err instanceof Error ? err.message : String(err)}`));
+    if (spinner) spinner.fail('Optimization failed');
+
+    // Typed error display
+    const message = err instanceof Error ? err.message : String(err);
+    const kind = err instanceof Error && 'kind' in err
+      ? (err as Error & { kind: string }).kind
+      : 'unknown';
+
+    const hintMap: Record<string, string> = {
+      'rate-limit': 'Wait a moment and try again, or use --max-calls to reduce API usage.',
+      'timeout': 'Try with fewer --trials or a lower --max-calls limit.',
+      'auth': 'Check that your API key is valid and has sufficient permissions.',
+      'network': 'Check your internet connection and try again.',
+      'validation': 'Check your input data and options.',
+      'compile': 'The optimizer encountered an internal error. Try with different options.',
+    };
+
+    console.error(chalk.red(`\n  Optimization failed (${kind}): ${message}`));
+    const hint = hintMap[kind];
+    if (hint) {
+      console.error(chalk.dim(`  Hint: ${hint}`));
+    }
     console.error('');
     process.exit(1);
   }
@@ -231,14 +276,23 @@ async function showStatus(): Promise<void> {
 async function applyVersion(versionId: string): Promise<void> {
   console.log(chalk.cyan('\n  Code Insights — Apply Optimized Prompt\n'));
 
-  const success = activateVersion(versionId);
+  const spinner = ora(`Activating version ${versionId}...`).start();
 
-  if (success) {
-    console.log(chalk.green(`  Activated version ${versionId}`));
-    console.log(chalk.dim('  This prompt will be used for future insight generation.\n'));
-  } else {
-    console.error(chalk.red(`  Version ${versionId} not found.`));
-    console.error(chalk.dim('  Run `code-insights optimize list` to see available versions.\n'));
+  try {
+    const success = activateVersion(versionId);
+
+    if (success) {
+      spinner.succeed(`Activated version ${versionId}`);
+      console.log(chalk.dim('  This prompt will be used for future insight generation.\n'));
+    } else {
+      spinner.fail(`Version ${versionId} not found`);
+      console.error(chalk.dim('  Run `code-insights optimize list` to see available versions.\n'));
+      process.exit(1);
+    }
+  } catch (err) {
+    spinner.fail('Failed to activate version');
+    console.error(chalk.red(`  Error: ${err instanceof Error ? err.message : String(err)}`));
+    console.error('');
     process.exit(1);
   }
 }
@@ -271,36 +325,49 @@ async function compareVersionsCmd(
     process.exit(1);
   }
 
+  // Look up full manifest entries for metadata display
+  const manifest = loadManifest();
+  const manifestA = manifest.versions.find(v => v.id === idA);
+  const manifestB = manifest.versions.find(v => v.id === idB);
+
   console.log(chalk.white(`  Comparing ${chalk.bold(idA)} vs ${chalk.bold(idB)}\n`));
 
   // Metadata comparison
   console.log(chalk.white('  Metadata:'));
   console.log(chalk.dim(`    ${'Property'.padEnd(20)} ${idA.padEnd(15)} ${idB}`));
   console.log(chalk.dim(`    ${'─'.repeat(60)}`));
-  console.log(chalk.dim(`    ${'Created'.padEnd(20)} ${comparison.versionA.createdAt.slice(0, 19).padEnd(15)} ${comparison.versionB.createdAt.slice(0, 19)}`));
-  console.log(chalk.dim(`    ${'Best Score'.padEnd(20)} ${comparison.versionA.bestScore.toFixed(3).padEnd(15)} ${comparison.versionB.bestScore.toFixed(3)}`));
-  console.log(chalk.dim(`    ${'Converged'.padEnd(20)} ${(comparison.versionA.converged ? 'yes' : 'no').padEnd(15)} ${comparison.versionB.converged ? 'yes' : 'no'}`));
-  console.log(chalk.dim(`    ${'Pareto Size'.padEnd(20)} ${String(comparison.versionA.paretoFrontSize).padEnd(15)} ${comparison.versionB.paretoFrontSize}`));
+  console.log(chalk.dim(`    ${'Created'.padEnd(20)} ${(manifestA?.createdAt.slice(0, 19) ?? 'N/A').padEnd(15)} ${manifestB?.createdAt.slice(0, 19) ?? 'N/A'}`));
+  console.log(chalk.dim(`    ${'Best Score'.padEnd(20)} ${(manifestA?.bestScore.toFixed(3) ?? 'N/A').padEnd(15)} ${manifestB?.bestScore.toFixed(3) ?? 'N/A'}`));
+  console.log(chalk.dim(`    ${'Converged'.padEnd(20)} ${(manifestA?.converged ? 'yes' : 'no').padEnd(15)} ${manifestB?.converged ? 'yes' : 'no'}`));
+  console.log(chalk.dim(`    ${'Pareto Size'.padEnd(20)} ${(String(manifestA?.paretoFrontSize) ?? 'N/A').padEnd(15)} ${manifestB?.paretoFrontSize ?? 'N/A'}`));
 
   // Scores comparison
-  if (comparison.scoresA?.selectedPoint && comparison.scoresB?.selectedPoint) {
+  const scoresA = comparison.versionA.scores;
+  const scoresB = comparison.versionB.scores;
+  if (scoresA && scoresB) {
     console.log(chalk.white('\n  Scores:'));
     console.log(chalk.dim(`    ${'Objective'.padEnd(15)} ${idA.padEnd(12)} ${idB.padEnd(12)} Diff`));
     console.log(chalk.dim(`    ${'─'.repeat(55)}`));
 
     const allKeys = new Set([
-      ...Object.keys(comparison.scoresA.selectedPoint.scores),
-      ...Object.keys(comparison.scoresB.selectedPoint.scores),
+      ...Object.keys(scoresA),
+      ...Object.keys(scoresB),
     ]);
 
     for (const key of allKeys) {
-      const scoreA = comparison.scoresA.selectedPoint.scores[key] ?? 0;
-      const scoreB = comparison.scoresB.selectedPoint.scores[key] ?? 0;
+      const scoreA = scoresA[key] ?? 0;
+      const scoreB = scoresB[key] ?? 0;
       const diff = scoreB - scoreA;
       const diffStr = diff > 0 ? chalk.green(`+${diff.toFixed(3)}`) : diff < 0 ? chalk.red(diff.toFixed(3)) : chalk.dim('0.000');
 
       console.log(chalk.dim(`    ${key.padEnd(15)} ${scoreA.toFixed(3).padEnd(12)} ${scoreB.toFixed(3).padEnd(12)} ${diffStr}`));
     }
+
+    // Overall scores from comparison
+    console.log(chalk.dim(`    ${'─'.repeat(55)}`));
+    console.log(chalk.dim(`    ${'Overall'.padEnd(15)} ${comparison.overallA.toFixed(3).padEnd(12)} ${comparison.overallB.toFixed(3).padEnd(12)}`));
+    const winnerStr = comparison.winner === 'tie' ? 'Tie' : comparison.winner === idA ? idA : idB;
+    console.log(chalk.white(`\n  Winner: ${chalk.bold(winnerStr)}`));
   }
 
   console.log('');
@@ -329,14 +396,121 @@ async function listVersionsCmd(): Promise<void> {
 async function deleteVersionCmd(versionId: string): Promise<void> {
   console.log(chalk.cyan('\n  Code Insights — Delete Version\n'));
 
-  const success = deleteVersion(versionId);
+  const spinner = ora(`Deleting version ${versionId}...`).start();
 
-  if (success) {
-    console.log(chalk.green(`  Deleted version ${versionId}\n`));
-  } else {
-    console.error(chalk.red(`  Version ${versionId} not found.\n`));
+  try {
+    const success = deleteVersion(versionId);
+
+    if (success) {
+      spinner.succeed(`Deleted version ${versionId}`);
+      console.log('');
+    } else {
+      spinner.fail(`Version ${versionId} not found`);
+      console.error(chalk.dim('  Run `code-insights optimize list` to see available versions.\n'));
+      process.exit(1);
+    }
+  } catch (err) {
+    spinner.fail('Failed to delete version');
+    console.error(chalk.red(`  Error: ${err instanceof Error ? err.message : String(err)}`));
+    console.error('');
     process.exit(1);
   }
+}
+
+// ── Topic extraction ─────────────────────────────────────────────────────────
+
+/**
+ * Extract key technical topics from transcript text.
+ * Uses simple heuristics: capitalized multi-word phrases, file paths, tool names,
+ * error patterns, and quoted strings. Deduplicates and returns at least `minTopics`.
+ *
+ * @param transcript  The session transcript text.
+ * @param projectName The project name (always included as a topic).
+ * @param summary     Optional session summary (included if non-empty).
+ * @param minTopics   Minimum number of topics to return (default 5).
+ */
+function extractTopicsFromTranscript(
+  transcript: string,
+  projectName: string,
+  summary: string | null,
+  minTopics: number = 5,
+): string[] {
+  const topics = new Set<string>();
+
+  // Always include project name (trimmed, skip if too generic)
+  const trimmedProject = projectName.trim();
+  if (trimmedProject && trimmedProject.length > 1 && !/^\d+$/.test(trimmedProject)) {
+    topics.add(trimmedProject);
+  }
+
+  // Include summary if it's substantive (more than just a few words of metadata)
+  if (summary && summary.trim().length > 3) {
+    // Extract the first meaningful clause (up to 8 words)
+    const summaryWords = summary.trim().split(/\s+/).slice(0, 8).join(' ');
+    topics.add(summaryWords);
+  }
+
+  // Extract file names (e.g. src/foo/bar.ts, package.json, *.py)
+  const filePattern = /\b[\w./-]+\.(ts|js|py|rb|go|json|yaml|yml|toml|md|sh|bash|txt|csv|sql|html|css|rs|java|c|cpp|h|hpp)\b/g;
+  for (const match of transcript.matchAll(filePattern)) {
+    topics.add(match[0]);
+    if (topics.size >= minTopics + 3) break;
+  }
+
+  // Extract tool/command names (words after "tool_", "run_", or CLI-like names)
+  const toolPattern = /\b(tool_\w+|create_\w+|execute_\w+|read_file|write_file|search_files|terminal|browser_\w+|web_search|web_extract|image_gen\w*)\b/g;
+  for (const match of transcript.matchAll(toolPattern)) {
+    topics.add(match[0]);
+    if (topics.size >= minTopics + 6) break;
+  }
+
+  // Extract error/message patterns (e.g. "Error:", "ENOENT", "TypeError")
+  const errorPattern = /\b([A-Z][a-z]+Error|ENOENT|ENOTEMPTY|EACCES|EPIPE|TypeError|ReferenceError|SyntaxError|AssertionError|RangeError)\b/g;
+  for (const match of transcript.matchAll(errorPattern)) {
+    topics.add(match[0]);
+    if (topics.size >= minTopics + 9) break;
+  }
+
+  // Extract capitalized multi-word technical terms (e.g. "GitHub Actions", "Type System")
+  const capTermPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+  for (const match of transcript.matchAll(capTermPattern)) {
+    // Skip common sentence starters
+    if (!/^(I |We |The |This |That |It |You |He |She |They |My |Your |Our |Their )/.test(match[1])) {
+      topics.add(match[1]);
+      if (topics.size >= minTopics + 12) break;
+    }
+  }
+
+  // Extract quoted strings that look like identifiers or paths
+  const quotedPattern = /["']([a-zA-Z_][\w./-]+)["']/g;
+  for (const match of transcript.matchAll(quotedPattern)) {
+    if (match[1].includes('.') || match[1].includes('/') || match[1].length > 3) {
+      topics.add(match[1]);
+      if (topics.size >= minTopics + 15) break;
+    }
+  }
+
+  // If we still don't have enough topics, fall back to top-frequency meaningful words
+  if (topics.size < minTopics) {
+    const words = transcript.toLowerCase().split(/\s+/);
+    const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'and', 'but', 'or', 'nor', 'not', 'so', 'yet', 'both', 'either', 'neither', 'each', 'every', 'all', 'any', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'only', 'own', 'same', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once', 'if', 'when', 'where', 'why', 'how', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'user', 'assistant']);
+    const wordFreq: Record<string, number> = {};
+    for (const word of words) {
+      const clean = word.replace(/[^a-z0-9_-]/g, '');
+      if (clean.length >= 4 && !stopWords.has(clean)) {
+        wordFreq[clean] = (wordFreq[clean] || 0) + 1;
+      }
+    }
+    const sorted = Object.entries(wordFreq)
+      .sort((a, b) => b[1] - a[1])
+      .map(([w]) => w);
+    for (const word of sorted) {
+      if (topics.size >= minTopics) break;
+      topics.add(word);
+    }
+  }
+
+  return Array.from(topics).slice(0, Math.max(minTopics, topics.size));
 }
 
 // ── Training data loading ────────────────────────────────────────────────────
@@ -399,15 +573,12 @@ function loadTrainingData(days: number, minMessages: number): TrainingExample[] 
 
       const sessionData = transcriptParts.join('\n\n');
 
-      // Extract topics from project name and summary
-      const sessionTopics = [
-        session.project_name,
-        ...(session.summary ? [session.summary] : []),
-      ].filter(Boolean) as string[];
+      // Extract topics from transcript content: file names, tool names, error messages, technical terms
+      const sessionTopics = extractTopicsFromTranscript(sessionData, session.project_name, session.summary);
 
       examples.push({
         sessionData,
-        expectedInsightCount: Math.max(3, Math.floor(session.message_count / 10)),
+        expectedInsightCount: Math.max(2, Math.floor(session.message_count / 20)),
         sessionTopics,
       });
     }
