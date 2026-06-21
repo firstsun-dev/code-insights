@@ -639,7 +639,7 @@ export class GEPARunner {
       {
         optimizerType: 'GEPA',
         numTrials: this.numTrials,
-        objectives: ['coverage', 'precision', 'actionability', 'brevity'],
+        objectives: ['coverage', 'precision', 'actionability', 'brevity', 'prompt_refinement'],
         bestScore: result.bestScore,
         converged: result.optimizedProgram?.stats?.convergenceInfo?.converged ?? false,
         totalRounds: result.optimizedProgram?.stats?.totalCalls ?? 0,
@@ -708,7 +708,13 @@ export class GEPARunner {
       throw new OptimizationError('validation', 'select-best-point', 'Pareto frontier is empty');
     }
 
-    const weights = { coverage: 0.35, precision: 0.30, actionability: 0.20, brevity: 0.15 };
+    const weights = {
+      coverage: 0.25,
+      precision: 0.25,
+      actionability: 0.20,
+      brevity: 0.10,
+      prompt_refinement: 0.20
+    };
 
     let bestPoint = result.paretoFront[0];
     let bestScore = -1;

@@ -18,6 +18,7 @@ export interface InsightOutput {
     description: string;
     confidence: number;
     evidence: string[];
+    suggested_prompt?: string;
   }>;
   quality: number;
 }
@@ -33,14 +34,17 @@ Focus on:
 2. Friction points encountered (blockers, confusion, errors) — suggest how to prevent or resolve them
 3. Effective patterns discovered (workflows, techniques, gotchas) — recommend adoption or adaptation
 4. Actionable learnings (transferable lessons) — state what the developer should start, stop, or continue doing
+5. User Prompt Quality — identify deficits in user input (vague requests, missing context, poor timing) and provide a "suggested_prompt" that would have produced a better AI response.
 
 Each insight MUST include:
-- A kebab-case category (e.g., "architecture-decision", "debugging-pattern")
+- A kebab-case category (e.g., "architecture-decision", "debugging-pattern", "prompt-deficit")
 - A specific description that includes a recommendation (use language like "should use", "consider", "avoid")
 - A confidence score (0-100)
 - 1-3 evidence citations referencing turn labels (e.g., "User#5")
+- For "prompt-deficit" insights, a "suggested_prompt" string showing a better way to phrase the request.
 
-Filter out generic or trivial findings. Return empty arrays for categories with no valid findings.`;
+Filter out generic or trivial findings. Return empty arrays for categories with no valid findings.
+CRITICAL: Do NOT wrap the entire JSON in extra braces or add text between the labeled blocks. Ensure every open brace has exactly one matching close brace.`;
 
 // IMPORTANT: AxFlow's parser (vs() in @ax-llm/ax 22.0.2) scans for
 // field-title prefixes ("Insights:", "Quality:") in the LLM response
@@ -50,13 +54,14 @@ Filter out generic or trivial findings. Return empty arrays for categories with 
 // object lands in `prediction.insights` and the metric crashes.
 export const INSIGHT_OUTPUT_FORMAT = `Respond with two labeled blocks. Use this exact format:
 
-Insights: {"insights": [{"category":"kebab-case-category","description":"One neutral sentence with specific details","confidence":85,"evidence":["User#1: Quote"]}]}
+Insights: [{"category":"kebab-case-category","description":"One recommendation sentence with specific details.","confidence":85,"evidence":["User#1: Quote"], "suggested_prompt": "Optional better version of the user's prompt"}]
 Quality: 0.85
 
 Rules:
-- "Insights:" must be followed by a JSON object with an "insights" array.
+- "Insights:" must be followed by a JSON array of objects.
 - "Quality:" must be followed by a single number between 0 and 1.
-- Each insight needs: category (kebab-case), description, confidence (0-100), evidence (1-3 turn citations like "User#1").
+- Each insight object needs: category (kebab-case), description, confidence (0-100), evidence (1-3 turn citations like "User#1").
+- For prompt-related insights, always include a concrete "suggested_prompt".
 - Output ONLY the two blocks above, no extra prose.`;
 
 // ── Ax program (optimizable) ─────────────────────────────────────────────────

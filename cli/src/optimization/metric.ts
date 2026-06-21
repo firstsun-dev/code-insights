@@ -9,6 +9,7 @@
  *   - precision:    % of generated insights that are non-trivial (not filler)
  *   - actionability: % of insights with concrete, actionable takeaways
  *   - brevity:      inverse of total insight token count (normalized)
+ *   - prompt_refinement: quality and presence of suggested prompts for identified deficits
  */
 
 import type { InsightOutput } from './flow.js';
@@ -285,6 +286,36 @@ function scoreBrevity(prediction: InsightOutput): number {
   return 0.05;
 }
 
+/**
+ * Prompt Refinement: quality and presence of suggested prompts for identified deficits.
+ *
+ * Rewards:
+ *   - Identifying prompt-deficit categories.
+ *   - Providing a non-empty suggested_prompt.
+ *   - suggested_prompt being longer and more descriptive than the description.
+ */
+function scorePromptRefinement(prediction: InsightOutput): number {
+  const insights = normalizeInsights(prediction);
+  const promptDeficits = insights.filter(i => i.category === 'prompt-deficit' || /prompt/i.test(i.category));
+
+  if (promptDeficits.length === 0) return 0.2; // Small baseline if no deficits found (might be a clean session)
+
+  let score = 0;
+  for (const insight of promptDeficits) {
+    if (insight.suggested_prompt && insight.suggested_prompt.length > 10) {
+      score += 1;
+      // Bonus if suggested prompt is significantly detailed
+      if (insight.suggested_prompt.length > 50) score += 0.5;
+      // Bonus if it contains common "good prompt" markers
+      if (/\b(context|example|format|schema|rules|role)\b/i.test(insight.suggested_prompt)) {
+        score += 0.5;
+      }
+    }
+  }
+
+  return clamp01(score / (promptDeficits.length * 2));
+}
+
 // ── Main metric function ─────────────────────────────────────────────────────
 
 /**
@@ -304,6 +335,7 @@ export function multiObjectiveMetric({ prediction, example }: MetricInput): Reco
     precision: scorePrecision(prediction),
     actionability: scoreActionability(prediction),
     brevity: scoreBrevity(prediction),
+    prompt_refinement: scorePromptRefinement(prediction),
   };
 }
 
@@ -321,7 +353,13 @@ function clamp01(value: number): number {
  */
 export function scalarizeScores(
   scores: Record<string, number>,
-  weights: Record<string, number> = { coverage: 0.40, precision: 0.30, actionability: 0.10, brevity: 0.15 }
+  weights: Record<string, number> = {
+    coverage: 0.25,
+    precision: 0.25,
+    actionability: 0.20,
+    brevity: 0.10,
+    prompt_refinement: 0.20
+  }
 ): number {
   let totalWeight = 0;
   let weightedSum = 0;
