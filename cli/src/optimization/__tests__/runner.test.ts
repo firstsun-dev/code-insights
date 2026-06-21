@@ -75,7 +75,7 @@ function makeFakeParetoResult(overrides?: Record<string, any>) {
         totalTokens: 50000,
         totalTime: 5000,
         avgLatencyPerEval: 200,
-        costByModel: { 'gpt-4o-mini': 0.5, 'claude-sonnet-4': 1.5 },
+        costByModel: { 'mistral-small-latest': 0.5, 'claude-sonnet-4': 1.5 },
       },
       convergenceInfo: {
         converged: true,
@@ -99,7 +99,7 @@ function makeFakeParetoResult(overrides?: Record<string, any>) {
           totalTokens: 50000,
           totalTime: 5000,
           avgLatencyPerEval: 200,
-          costByModel: { 'gpt-4o-mini': 0.5, 'claude-sonnet-4': 1.5 },
+          costByModel: { 'mistral-small-latest': 0.5, 'claude-sonnet-4': 1.5 },
         },
         convergenceInfo: {
           converged: true,
@@ -158,9 +158,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('throws if training data is empty', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     await expect(runner.optimize([])).rejects.toThrow(
@@ -170,9 +170,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('calls AxGEPA.compile with the correct number of trials', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       numTrials: 10,
       seed: 42,
     });
@@ -192,9 +192,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('passes training and validation data to compile', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const trainData = [makeTrainingExample(), makeTrainingExample()];
@@ -209,9 +209,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('uses validation data as validationExamples when provided', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const trainData = [makeTrainingExample()];
@@ -224,9 +224,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('falls back to training data for validation when no validation data provided', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const trainData = [makeTrainingExample()];
@@ -238,9 +238,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('returns GEPARunnerResult with all required fields', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -255,9 +255,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('selects the best point from the Pareto front using weighted-sum scalarization', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -274,9 +274,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('calls registerVersion with correct optimizer metadata', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       numTrials: 25,
     });
 
@@ -286,17 +286,17 @@ describe('GEPARunner.optimize()', () => {
       expect.objectContaining({
         optimizerType: 'GEPA',
         numTrials: 25,
-        objectives: ['coverage', 'precision', 'actionability', 'brevity'],
+        objectives: ['coverage', 'precision', 'actionability', 'brevity', 'prompt_refinement'],
       }),
-      true // activate=true
+      true
     );
   });
 
   it('calls saveArtifact, saveScores, and saveMetadata after optimization', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     await runner.optimize([makeTrainingExample()]);
@@ -308,12 +308,12 @@ describe('GEPARunner.optimize()', () => {
 
   it('saves metadata with correct model info and data counts', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
-      teacherProvider: 'anthropic',
+      studentModel: 'mistral-small-latest',
+      teacherProvider: 'mistral',
       teacherApiKey: 'teacher-key',
-      teacherModel: 'claude-sonnet-4-20250514',
+      teacherModel: 'mistral-medium-latest',
     });
 
     const trainData = [makeTrainingExample(), makeTrainingExample()];
@@ -323,8 +323,8 @@ describe('GEPARunner.optimize()', () => {
     expect(saveMetadata).toHaveBeenCalledWith(
       'v1',
       expect.objectContaining({
-        studentModel: 'openai/gpt-4o-mini',
-        teacherModel: 'anthropic/claude-sonnet-4-20250514',
+        studentModel: 'mistral/mistral-small-latest',
+        teacherModel: 'mistral/mistral-medium-latest',
         trainingExampleCount: 2,
         validationExampleCount: 1,
       })
@@ -333,9 +333,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('serializes the optimized program as artifact', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -348,9 +348,9 @@ describe('GEPARunner.optimize()', () => {
     mockCompileFn = vi.fn().mockResolvedValue(makeFakeParetoResult({ optimizedProgram: undefined }));
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -364,9 +364,9 @@ describe('GEPARunner.optimize()', () => {
     mockCompileFn = vi.fn().mockResolvedValue(makeFakeParetoResult({ paretoFront: [] }));
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     await expect(runner.optimize([makeTrainingExample()])).rejects.toThrow(
@@ -376,9 +376,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('defaults teacher config to student config when not specified', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       studentApiUrl: 'https://openrouter.ai/api/v1',
     });
 
@@ -388,17 +388,17 @@ describe('GEPARunner.optimize()', () => {
     expect(saveMetadata).toHaveBeenCalledWith(
       'v1',
       expect.objectContaining({
-        studentModel: 'openai/gpt-4o-mini',
-        teacherModel: 'openai/gpt-4o-mini',
+        studentModel: 'mistral/mistral-small-latest',
+        teacherModel: 'mistral/mistral-small-latest',
       })
     );
   });
 
   it('passes maxMetricCalls to compile options', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       maxMetricCalls: 50,
     });
 
@@ -410,9 +410,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('passes verbose flag to both AxGEPA constructor and compile options', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       verbose: true,
     });
 
@@ -430,9 +430,9 @@ describe('GEPARunner.optimize()', () => {
     const customLogger = (entry: any) => logEntries.push(entry);
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       logger: customLogger,
     });
 
@@ -457,9 +457,9 @@ describe('GEPARunner.optimize()', () => {
     const customLogger = (entry: any) => logEntries.push(entry);
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       logger: customLogger,
       numTrials: 15,
     });
@@ -500,9 +500,9 @@ describe('GEPARunner.optimize()', () => {
     const customLogger = (entry: any) => logEntries.push(entry);
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       logger: customLogger,
     });
 
@@ -526,9 +526,9 @@ describe('GEPARunner.optimize()', () => {
 
     try {
       const runner = createGEPARunner({
-        studentProvider: 'openai',
+        studentProvider: 'mistral',
         studentApiKey: 'test-key',
-        studentModel: 'gpt-4o-mini',
+        studentModel: 'mistral-small-latest',
         verbose: false,
       });
 
@@ -544,9 +544,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('passes earlyStoppingTrials to AxGEPA constructor', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       earlyStoppingTrials: 5,
     });
 
@@ -559,9 +559,9 @@ describe('GEPARunner.optimize()', () => {
 
   it('passes minibatchSize to AxGEPA constructor', async () => {
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
       minibatchSize: 8,
     });
 
@@ -610,9 +610,9 @@ describe('GEPARunner.selectBestPoint() (tested via optimize)', () => {
     }));
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -635,9 +635,9 @@ describe('GEPARunner.selectBestPoint() (tested via optimize)', () => {
     }));
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -663,9 +663,9 @@ describe('GEPARunner.selectBestPoint() (tested via optimize)', () => {
     }));
 
     const runner = createGEPARunner({
-      studentProvider: 'openai',
+      studentProvider: 'mistral',
       studentApiKey: 'test-key',
-      studentModel: 'gpt-4o-mini',
+      studentModel: 'mistral-small-latest',
     });
 
     const result = await runner.optimize([makeTrainingExample()]);
@@ -715,7 +715,7 @@ describe('runGEPAOptimization()', () => {
   }
 
   it('throws when no API key is available', async () => {
-    saveAndDeleteEnv('OPENAI_API_KEY');
+    saveAndDeleteEnv('MISTRAL_API_KEY');
     saveAndDeleteEnv('ANTHROPIC_API_KEY');
     saveAndDeleteEnv('MISTRAL_API_KEY');
     saveAndDeleteEnv('DEEPSEEK_API_KEY');
@@ -726,11 +726,11 @@ describe('runGEPAOptimization()', () => {
 
     await expect(
       runGEPAOptimization([makeTrainingExample()])
-    ).rejects.toThrow("No API key for provider 'openai'");
+    ).rejects.toThrow("No API key for provider 'mistral'");
   });
 
-  it('uses OPENAI_API_KEY from environment when studentApiKey not provided', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-test-env-key');
+  it('uses MISTRAL_API_KEY from environment when studentApiKey not provided', async () => {
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-test-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -738,8 +738,8 @@ describe('runGEPAOptimization()', () => {
     expect(result).toHaveProperty('paretoResult');
   });
 
-  it('defaults to gpt-4o-mini as student model', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-test-env-key');
+  it('defaults to mistral-small-latest as student model', async () => {
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-test-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -748,31 +748,30 @@ describe('runGEPAOptimization()', () => {
     expect(saveMetadata).toHaveBeenCalledWith(
       'v1',
       expect.objectContaining({
-        studentModel: 'openai/gpt-4o-mini',
+        studentModel: 'mistral/mistral-small-latest',
       })
     );
   });
 
-  it('defaults teacher to student provider with claude-sonnet-4 model when teacher not specified', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', '***');
+  it('defaults teacher to student provider with mistral-medium-latest model when teacher not specified', async () => {
+    saveAndSetEnv('MISTRAL_API_KEY', '***');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
     await runGEPAOptimization([makeTrainingExample()]);
 
     // runGEPAOptimization defaults teacherProvider to student provider,
-    // and teacherModel to 'claude-sonnet-4-20250514'
+    // and teacherModel to 'mistral-medium-latest'
     expect(saveMetadata).toHaveBeenCalledWith(
       'v1',
       expect.objectContaining({
-        teacherModel: 'openai/claude-sonnet-4-20250514',
+        teacherModel: 'mistral/mistral-medium-latest',
       })
     );
   });
 
   it('uses explicit teacher config when provided', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-test-env-key');
-    saveAndSetEnv('ANTHROPIC_API_KEY', 'sk-ant-test-key');
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-test-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -780,22 +779,22 @@ describe('runGEPAOptimization()', () => {
       [makeTrainingExample()],
       [],
       {
-        teacherProvider: 'anthropic',
-        teacherModel: 'claude-sonnet-4-20250514',
+        teacherProvider: 'mistral',
+        teacherModel: 'mistral-medium-latest',
       }
     );
 
     expect(saveMetadata).toHaveBeenCalledWith(
       'v1',
       expect.objectContaining({
-        teacherModel: 'anthropic/claude-sonnet-4-20250514',
+        teacherModel: 'mistral/mistral-medium-latest',
       })
     );
   });
 
   it('uses correct environment variable for anthropic provider', async () => {
     saveAndSetEnv('ANTHROPIC_API_KEY', 'sk-ant-test-key');
-    saveAndDeleteEnv('OPENAI_API_KEY');
+    saveAndDeleteEnv('MISTRAL_API_KEY');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -811,7 +810,7 @@ describe('runGEPAOptimization()', () => {
 
   it('uses correct environment variable for deepseek provider', async () => {
     saveAndSetEnv('DEEPSEEK_API_KEY', 'ds-test-key');
-    saveAndDeleteEnv('OPENAI_API_KEY');
+    saveAndDeleteEnv('MISTRAL_API_KEY');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -825,7 +824,7 @@ describe('runGEPAOptimization()', () => {
   });
 
   it('passes numTrials default of 25', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-test-env-key');
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-test-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -838,7 +837,7 @@ describe('runGEPAOptimization()', () => {
   });
 
   it('allows overriding numTrials', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-test-env-key');
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-test-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -855,7 +854,7 @@ describe('runGEPAOptimization()', () => {
   });
 
   it('uses studentApiKey when explicitly provided over env var', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-env-key');
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-env-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 
@@ -869,7 +868,7 @@ describe('runGEPAOptimization()', () => {
   });
 
   it('supports custom apiUrl (OpenRouter pattern)', async () => {
-    saveAndSetEnv('OPENAI_API_KEY', 'sk-or-test-key');
+    saveAndSetEnv('MISTRAL_API_KEY', 'sk-or-test-key');
 
     const { runGEPAOptimization } = await import('../../optimization/runner.js');
 

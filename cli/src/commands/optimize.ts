@@ -38,9 +38,9 @@ export function buildOptimizeCommand(): Command {
   cmd
     .command('run')
     .description('Run GEPA optimization on insight generation prompts')
-    .option('-p, --provider <name>', 'LLM provider (openai, anthropic, mistral, deepseek, cohere, google-gemini)', 'openai')
-    .option('--student-model <model>', 'Student model (fast/cheap)', 'gpt-4o-mini')
-    .option('--teacher-model <model>', 'Teacher model (strong)', 'claude-sonnet-4-20250514')
+    .option('-p, --provider <name>', 'LLM provider (openai, anthropic, mistral, deepseek, cohere, google-gemini)', 'mistral')
+    .option('--student-model <model>', 'Student model (fast/cheap)', 'mistral-small-latest')
+    .option('--teacher-model <model>', 'Teacher model (strong)', 'mistral-medium-latest')
     .option('-n, --trials <n>', 'Number of optimization trials', '25')
     .option('--seed <n>', 'Random seed for reproducibility', '42')
     .option('--max-calls <n>', 'Max metric calls (cost bound)', '200')

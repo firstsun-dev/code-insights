@@ -737,7 +737,7 @@ export async function runGEPAOptimization(
   validationData: TrainingExample[] = [],
   config: Partial<GEPARunnerConfig> = {}
 ): Promise<GEPARunnerResult> {
-  const provider = config.studentProvider ?? 'openai';
+  const provider = config.studentProvider ?? 'mistral';
   const apiKeyEnvMap: Record<string, string> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
@@ -762,11 +762,11 @@ export async function runGEPAOptimization(
   const runner = createGEPARunner({
     studentProvider: provider,
     studentApiKey: apiKey,
-    studentModel: config.studentModel ?? 'gpt-4o-mini',
+    studentModel: config.studentModel ?? 'mistral-small-latest',
     studentApiUrl: config.studentApiUrl,
     teacherProvider: config.teacherProvider ?? provider,
     teacherApiKey: config.teacherApiKey ?? apiKey,
-    teacherModel: config.teacherModel ?? 'claude-sonnet-4-20250514',
+    teacherModel: config.teacherModel ?? 'mistral-medium-latest',
     teacherApiUrl: config.teacherApiUrl,
     numTrials: config.numTrials ?? 25,
     seed: config.seed ?? 42,
