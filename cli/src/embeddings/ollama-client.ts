@@ -6,6 +6,13 @@ import type { EmbeddingConfig, EmbeddingResult } from './types.js';
 const MAX_RETRIES = 3;
 const BASE_RETRY_MS = 1000;
 
+/**
+ * Maximum characters to send to Ollama per text.
+ * Most embedding models have a context window of 512-4096 tokens.
+ * 6000 chars is ~1500 tokens, which is a safe compromise for most local models.
+ */
+const MAX_EMBEDDING_CHARS = 6000;
+
 /** Thrown when Ollama returns a non-200 or the response is malformed. */
 export class EmbeddingError extends Error {
   constructor(
@@ -112,14 +119,21 @@ export async function embedTexts(
 
   for (let i = 0; i < items.length; i += config.batchSize) {
     const batch = items.slice(i, i + config.batchSize);
-    const texts = batch.map(b => b.text);
+    
+    // Truncate texts to prevent context length errors in Ollama
+    const texts = batch.map(b => 
+      b.text.length > MAX_EMBEDDING_CHARS 
+        ? b.text.slice(0, MAX_EMBEDDING_CHARS) 
+        : b.text
+    );
+    
     const vectors = await embedBatch(config, texts, rateLimiter);
 
     for (let j = 0; j < batch.length; j++) {
       results.push({
         id: batch[j].id,
         vector: vectors[j],
-        sourceText: batch[j].text,
+        sourceText: texts[j], // Use the potentially truncated text as the source
         model: config.model,
         dim: vectors[j].length,
       });
