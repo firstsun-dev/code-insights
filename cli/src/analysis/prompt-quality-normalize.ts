@@ -107,7 +107,7 @@ const PQ_ALIASES: Record<string, string> = {
  *
  * Note: alias targets in PQ_ALIASES bypass the canonical check intentionally.
  */
-export function normalizePromptQualityCategory(category: string): string {
+export function normalizePromptQualityCategory(category: string | null | undefined): string {
   return normalizeCategory(category, {
     canonicalCategories: CANONICAL_PQ_CATEGORIES,
     aliases: PQ_ALIASES,

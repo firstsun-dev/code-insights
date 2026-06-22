@@ -1,16 +1,16 @@
 # Graph Report - code-insights  (2026-06-22)
 
 ## Corpus Check
-- 375 files · ~249,539 words
+- 375 files · ~249,604 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2163 nodes · 5794 edges · 135 communities (116 shown, 19 thin omitted)
+- 2157 nodes · 5765 edges · 117 communities (102 shown, 15 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 110 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b151aa97`
+- Built from commit: `e7747dac`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -65,17 +65,13 @@
 - [[_COMMUNITY_Community 47|Community 47]]
 - [[_COMMUNITY_Community 48|Community 48]]
 - [[_COMMUNITY_Community 49|Community 49]]
-- [[_COMMUNITY_Community 50|Community 50]]
-- [[_COMMUNITY_Community 51|Community 51]]
 - [[_COMMUNITY_Community 52|Community 52]]
-- [[_COMMUNITY_Community 53|Community 53]]
 - [[_COMMUNITY_Community 54|Community 54]]
 - [[_COMMUNITY_Community 55|Community 55]]
 - [[_COMMUNITY_Community 56|Community 56]]
 - [[_COMMUNITY_Community 57|Community 57]]
 - [[_COMMUNITY_Community 58|Community 58]]
 - [[_COMMUNITY_Community 59|Community 59]]
-- [[_COMMUNITY_Community 60|Community 60]]
 - [[_COMMUNITY_Community 61|Community 61]]
 - [[_COMMUNITY_Community 62|Community 62]]
 - [[_COMMUNITY_Community 63|Community 63]]
@@ -84,36 +80,26 @@
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 67|Community 67]]
 - [[_COMMUNITY_Community 68|Community 68]]
-- [[_COMMUNITY_Community 69|Community 69]]
 - [[_COMMUNITY_Community 70|Community 70]]
 - [[_COMMUNITY_Community 71|Community 71]]
 - [[_COMMUNITY_Community 72|Community 72]]
 - [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
-- [[_COMMUNITY_Community 75|Community 75]]
-- [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 - [[_COMMUNITY_Community 78|Community 78]]
 - [[_COMMUNITY_Community 79|Community 79]]
-- [[_COMMUNITY_Community 80|Community 80]]
 - [[_COMMUNITY_Community 81|Community 81]]
 - [[_COMMUNITY_Community 82|Community 82]]
 - [[_COMMUNITY_Community 83|Community 83]]
 - [[_COMMUNITY_Community 84|Community 84]]
-- [[_COMMUNITY_Community 85|Community 85]]
 - [[_COMMUNITY_Community 86|Community 86]]
 - [[_COMMUNITY_Community 87|Community 87]]
 - [[_COMMUNITY_Community 88|Community 88]]
-- [[_COMMUNITY_Community 89|Community 89]]
 - [[_COMMUNITY_Community 90|Community 90]]
-- [[_COMMUNITY_Community 91|Community 91]]
 - [[_COMMUNITY_Community 92|Community 92]]
 - [[_COMMUNITY_Community 93|Community 93]]
 - [[_COMMUNITY_Community 94|Community 94]]
 - [[_COMMUNITY_Community 95|Community 95]]
-- [[_COMMUNITY_Community 96|Community 96]]
-- [[_COMMUNITY_Community 97|Community 97]]
-- [[_COMMUNITY_Community 98|Community 98]]
 - [[_COMMUNITY_Community 99|Community 99]]
 - [[_COMMUNITY_Community 100|Community 100]]
 - [[_COMMUNITY_Community 101|Community 101]]
@@ -135,12 +121,8 @@
 - [[_COMMUNITY_Community 117|Community 117]]
 - [[_COMMUNITY_Community 118|Community 118]]
 - [[_COMMUNITY_Community 119|Community 119]]
-- [[_COMMUNITY_Community 120|Community 120]]
 - [[_COMMUNITY_Community 121|Community 121]]
 - [[_COMMUNITY_Community 123|Community 123]]
-- [[_COMMUNITY_Community 150|Community 150]]
-- [[_COMMUNITY_Community 152|Community 152]]
-- [[_COMMUNITY_Community 154|Community 154]]
 - [[_COMMUNITY_Community 155|Community 155]]
 
 ## God Nodes (most connected - your core abstractions)
@@ -156,6 +138,8 @@
 10. `detectSessionCharacter()` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `parseLLMJson()` --calls--> `extractJsonPayload()`  [INFERRED]
+  server/src/routes/reflect.ts → cli/src/analysis/response-parsers.ts
 - `getWeekKey()` --calls--> `startOfWeek()`  [INFERRED]
   dashboard/src/pages/JournalPage.tsx → cli/src/commands/stats/data/aggregation-helpers.ts
 - `getWeekLabel()` --calls--> `startOfWeek()`  [INFERRED]
@@ -164,113 +148,111 @@
   server/src/routes/analysis.ts → cli/src/db/client.ts
 - `initTestDb()` --calls--> `runMigrations()`  [INFERRED]
   server/src/llm/analysis.test.ts → cli/src/db/migrate.ts
-- `initTestDb()` --calls--> `runMigrations()`  [INFERRED]
-  server/src/routes/analysis.test.ts → cli/src/db/migrate.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (135 total, 19 thin omitted)
+## Communities (117 total, 15 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.14
-Nodes (17): FRICTION_ALIASES, normalizeFrictionCategory(), classifyStoredUserMessage(), formatSessionMetaLine(), ParsedToolCall, ParsedToolResult, safeParseJson(), CANONICAL_FRICTION_CATEGORIES (+9 more)
+Cohesion: 0.17
+Nodes (14): detectRageLoopHeuristic(), RageLoopSignal, classifyStoredUserMessage(), formatSessionMetaLine(), ParsedToolCall, ParsedToolResult, safeParseJson(), SessionMetadata (+6 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.16
-Nodes (16): SyncState, VALID_GEMINI_SESSION, MockDatabase, CONFIG_DIR, CONFIG_FILE, ensureConfigDir(), getClaudeDir(), getGeminiHomeDir() (+8 more)
+Cohesion: 0.15
+Nodes (20): AntigravityProvider, VibeMessage, VibeMeta, SessionProvider, ParsedMessage, SessionUsage, ToolCall, ToolResult (+12 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.06
-Nodes (99): costAction(), handleStatsError(), modelsAction(), overviewAction(), AggregatedData, patternsAction(), projectsAction(), todayAction() (+91 more)
+Cohesion: 0.05
+Nodes (107): costAction(), handleStatsError(), modelsAction(), overviewAction(), AggregatedData, patternsAction(), projectsAction(), todayAction() (+99 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.05
-Nodes (53): buildSession(), classifyUserMessage(), extractProjectName(), extractProjectPath(), extractSessionId(), extractSlashCommandName(), extractTextContent(), extractThinkingContent() (+45 more)
+Cohesion: 0.06
+Nodes (48): buildSession(), classifyUserMessage(), extractProjectName(), extractProjectPath(), extractSessionId(), extractSlashCommandName(), extractTextContent(), extractThinkingContent() (+40 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.35
-Nodes (3): Config Manager, GeminiCliProvider, GeminiCliProvider
+Cohesion: 0.19
+Nodes (6): Config Manager, GeminiCliProvider, hooksFile(), _mockOs, readSettings(), writeSettings()
 
 ### Community 5 - "Community 5"
-Cohesion: 0.07
-Nodes (40): Project, cn(), LLMProvider, ProviderInfo, PROVIDERS, ProjectNavProps, Alert(), AlertDescription() (+32 more)
+Cohesion: 0.09
+Nodes (24): cn(), Alert(), AlertDescription(), AlertTitle(), alertVariants, AlertDialogMedia(), AlertDialogOverlay(), CardAction() (+16 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.09
 Nodes (31): formatAgentRules(), parseMetadata(), asString(), formatKnowledgeBase(), InsightRow, parseBullets(), parseMetadata(), renderDecisions() (+23 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.13
-Nodes (31): AnalysisContext, AnalysisContextValue, AnalysisState, AnalysisType, useAnalysis(), AnalyzeButton(), AnalyzeButtonProps, AnalyzeDropdownProps (+23 more)
+Cohesion: 0.08
+Nodes (45): AnalysisContext, AnalysisContextValue, AnalysisState, AnalysisType, useAnalysis(), AnalyzeButton(), AnalyzeButtonProps, AnalyzeDropdown() (+37 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.15
-Nodes (32): ToolCall, ToolResult, AgentToolPanel(), AgentToolPanelProps, getAgentDisplayName(), getAgentInitials(), AskUserQuestionPanel(), AskUserQuestionPanelProps (+24 more)
+Cohesion: 0.14
+Nodes (35): InsightScope, SessionCharacter, TitleSource, ToolCall, ToolResult, AgentToolPanel(), AgentToolPanelProps, getAgentDisplayName() (+27 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.12
-Nodes (22): ActivityChart(), ActivityChartProps, InsightTypeChart(), InsightTypeChartProps, LABELS, ErrorCardProps, CHART_COLORS, DashboardActivityChart() (+14 more)
+Cohesion: 0.08
+Nodes (42): ActivityChart(), ActivityChartProps, InsightTypeChart(), InsightTypeChartProps, LABELS, ErrorCard(), ErrorCardProps, CHART_COLORS (+34 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.10
-Nodes (32): useAnalyzeSession(), useProject(), SessionFilters, AnalysisApiResult, AnalysisQueueItem, analyzePromptQuality(), analyzeSession(), deleteSession() (+24 more)
+Cohesion: 0.05
+Nodes (63): useAnalyzeSession(), useAnalysisQueue(), useQueuedSessionIds(), Range, useDashboardStats(), ExportGenerateState, ExportGenerateStatus, ExportParams (+55 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.11
-Nodes (22): AntigravityProvider, CrushProvider, VibeMessage, VibeMeta, antigravity, claudeCode, codex, copilot (+14 more)
+Cohesion: 0.09
+Nodes (18): ClaudeCodeProvider, discoverJsonlFiles(), CrushProvider, antigravity, claudeCode, codex, copilot, copilotCli (+10 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.08
-Nodes (22): AnalysisProvider(), ErrorBoundary, Props, State, getSystemTheme(), Theme, ThemeContext, ThemeContextValue (+14 more)
+Cohesion: 0.22
+Nodes (9): AnalysisProvider(), captureDashboardLoaded(), capturePageView(), initTelemetry(), SessionDetailPage(), ROUTE_TITLES, RouteEffects(), queryClient (+1 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.14
-Nodes (19): DecisionContent(), FIELD_CONFIG, LearningContent(), OUTCOME_CONFIG, OutcomeBadge(), renderTypeContent(), InsightCard(), typeIcons (+11 more)
+Cohesion: 0.09
+Nodes (33): INSIGHT_TYPE_LABELS, ActivityFeedProps, INSIGHT_TYPES, InsightTypePillsProps, DecisionContent(), FIELD_CONFIG, LearningContent(), OUTCOME_CONFIG (+25 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.12
-Nodes (23): ConversationSearch(), useProjectMutation(), useSearch(), EditProjectDialog(), EditProjectDialogProps, CommandPalette(), CommandPaletteProps, NAV_ITEMS (+15 more)
+Cohesion: 0.16
+Nodes (16): ProfilePromptDialogProps, useProjectMutation(), UserProfile, patchSession(), EditProjectDialog(), EditProjectDialogProps, EditSessionDialogProps, RenameSessionDialogProps (+8 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.17
-Nodes (21): deleteSessionInsights(), saveFacetsToDb(), saveAnalysisUsage(), formatMessagesForAnalysis(), analyzeSession(), chunkMessages(), deduplicateByTitle(), DEFAULT_RETRIEVAL_CONFIG (+13 more)
+Cohesion: 0.15
+Nodes (22): deleteSessionInsights(), saveFacetsToDb(), saveAnalysisUsage(), formatMessagesForAnalysis(), analyzeSession(), chunkMessages(), deduplicateByTitle(), DEFAULT_RETRIEVAL_CONFIG (+14 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.13
-Nodes (15): CodexNativeRunner, GeminiNativeRunner, MistralVibeRunner, ClaudeEvent, ClaudeNativeRunner, ClaudeResultEvent, extractResultFromEnvelope(), ProcessQueueOptions (+7 more)
+Cohesion: 0.16
+Nodes (10): CodexNativeRunner, GeminiNativeRunner, MistralVibeRunner, AnalysisRunner, RunAnalysisParams, RunAnalysisResult, mockedExecFileSync, mockedReadFileSync (+2 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.09
-Nodes (21): generateFrictionWinsPrompt(), generateRulesSkillsPrompt(), generateWorkingStylePrompt(), sampleEffectivePatterns, sampleFrictionCategories, ALL_SECTIONS, app, WeekEntry (+13 more)
+Cohesion: 0.05
+Nodes (43): FRICTION_ALIASES, normalizeFrictionCategory(), kebabToTitleCase(), levenshtein(), normalizeCategory(), NormalizerConfig, getPatternCategoryLabel(), normalizePatternCategory() (+35 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.13
-Nodes (26): dashboardCommand(), DashboardOptions, isPortInUse(), embeddingsSearchCommand(), embeddingsStatusCommand(), initCommand(), InitOptions, CLAUDE_SETTINGS_DIR (+18 more)
+Cohesion: 0.11
+Nodes (24): dashboardCommand(), DashboardOptions, isPortInUse(), buildEmbeddingsCommand(), initCommand(), InitOptions, CLAUDE_SETTINGS_DIR, ClaudeSettings (+16 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.17
 Nodes (29): applyVersion(), compareVersionsCmd(), deleteVersionCmd(), listVersionsCmd(), showStatus(), ABComparisonResult, activateVersion(), compareVersions() (+21 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.11
-Nodes (26): ErrorCard(), INSIGHT_TYPE_LABELS, ActivityFeedProps, InsightCardProps, InsightListItemProps, PromptQualityCardProps, PatternGroup, RecurringPatternsSection() (+18 more)
+Cohesion: 0.23
+Nodes (10): useSearch(), CommandPalette(), CommandPaletteProps, NAV_ITEMS, pushRecent(), readRecent(), RecentItem, ResultItem (+2 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.22
-Nodes (9): ClaudeNativeRunner, Cost Tracking, Device Info Tracking, insertSessionWithProject, installHookCommand, Provider Registry, runSync, SessionEnd Hook (Analysis) (+1 more)
+Cohesion: 0.11
+Nodes (15): ClaudeEvent, ClaudeNativeRunner, ClaudeResultEvent, extractResultFromEnvelope(), Cost Tracking, Device Info Tracking, insertSessionWithProject, installHookCommand (+7 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.12
-Nodes (25): Range, useDashboardStats(), useBackfillFacets(), useMissingFacets(), FilterConfig, useFilterParams(), useInsights(), useMessages() (+17 more)
+Cohesion: 0.25
+Nodes (8): useCommandPalette(), Header(), Layout(), useTheme(), ThemeToggle(), Props, Toaster(), TooltipProvider()
 
 ### Community 23 - "Community 23"
-Cohesion: 0.10
-Nodes (26): AntiPattern, CategoryBadge(), DIMENSION_LABELS, getScoreColor(), LegacyContent(), NewSchemaContent(), PQDimensionScores, PQFinding (+18 more)
+Cohesion: 0.09
+Nodes (28): AntiPattern, CategoryBadge(), DIMENSION_LABELS, getScoreColor(), LegacyContent(), NewSchemaContent(), PQDimensionScores, PQFinding (+20 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.10
-Nodes (19): convertPQToInsightRow(), convertToInsightRows(), DedupMetrics, DeleteOptions, EMPTY_DEDUP_METRICS, insertInsightsBatch(), InsightRow, markInsightStale() (+11 more)
+Cohesion: 0.25
+Nodes (3): ErrorBoundary, Props, State
 
 ### Community 25 - "Community 25"
 Cohesion: 0.21
@@ -278,123 +260,111 @@ Nodes (20): createClientFromConfig(), initRateLimiterFromConfig(), PROVIDER_API_
 
 ### Community 26 - "Community 26"
 Cohesion: 0.11
-Nodes (16): app, app, Range, VALID_RANGES, app, app, VALID_TYPES, app (+8 more)
+Nodes (15): app, app, Range, VALID_RANGES, app, VALID_TYPES, app, app (+7 more)
 
 ### Community 27 - "Community 27"
 Cohesion: 0.12
 Nodes (18): buildSession(), CodexProvider, CodexRolloutLine, CodexSessionMeta, CodexUsage, collectRolloutFiles(), extractContent(), extractFormatBContent() (+10 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.14
-Nodes (17): AnalysisUsageRow, getSessionAnalysisUsage(), SaveAnalysisUsageData, statusCommand(), DB_DIR, DB_PATH, getDb(), getDbPath() (+9 more)
+Cohesion: 0.29
+Nodes (7): statusCommand(), DB_DIR, DB_PATH, getDbPath(), MigrationResult, getProjects(), loadSyncState()
 
 ### Community 29 - "Community 29"
-Cohesion: 0.15
-Nodes (24): deduplicateToolsForIcons(), drawIcon(), drawToolIcon(), ICON_BAR_CHART_3, ICON_BOOK_OPEN, ICON_CLOCK, ICON_EYE, ICON_GIT_BRANCH (+16 more)
+Cohesion: 0.09
+Nodes (36): ProfilePromptDialog(), SESSION_CHARACTER_LABELS, isProfileComplete(), normalizeGithubUsername(), readStorage(), useUserProfile(), PQDimensionScores, deduplicateToolsForIcons() (+28 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.14
-Nodes (16): applyV1(), applyV10(), applyV11(), applyV2(), applyV3(), applyV4(), applyV5(), applyV6() (+8 more)
+Cohesion: 0.15
+Nodes (15): applyV1(), applyV10(), applyV11(), applyV2(), applyV3(), applyV4(), applyV5(), applyV6() (+7 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.13
-Nodes (19): configCommand, describeApiKeySource(), llmCommand, PROVIDER_API_KEY_ENV, runInteractiveLLMConfig(), saveLLMConfig(), showConfigAction(), getCurrentProjectName() (+11 more)
+Nodes (24): configCommand, describeApiKeySource(), llmCommand, PROVIDER_API_KEY_ENV, runInteractiveLLMConfig(), saveLLMConfig(), showConfigAction(), disableAction() (+16 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.13
-Nodes (17): SavedFiltersDropdown(), SavedFiltersDropdownProps, SaveFilterPopover(), SaveFilterPopoverProps, readStorage(), SavedFilter, useSavedFilters(), useDeletedSessionCount() (+9 more)
+Cohesion: 0.07
+Nodes (47): LlmNudgeBanner(), LlmNudgeBannerProps, TITLES, InsightTypePills(), SavedFiltersDropdown(), SavedFiltersDropdownProps, SaveFilterPopover(), SaveFilterPopoverProps (+39 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.16
-Nodes (17): detectRageLoopHeuristic(), RageLoopSignal, SQLiteMessageRow, __dirname, __filename, insightsCheckCommand(), insightsCommand(), InsightsCommandOptions (+9 more)
+Cohesion: 0.23
+Nodes (14): __dirname, __filename, insightsCheckCommand(), insightsCommand(), InsightsCommandOptions, isAlreadyAnalyzed(), loadSchema(), loadSessionForAnalysis() (+6 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.13
 Nodes (16): LLMChatFn, LLMMessage, LLMResponse, makeAnthropicChat(), makeChatFn(), makeGeminiChat(), makeMistralChat(), makeOllamaChat() (+8 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.12
-Nodes (23): OUTCOME_DOT, formatCompact(), StatsHero(), StatsHeroProps, useCommandPalette(), Header(), Layout(), exportSession() (+15 more)
+Cohesion: 0.10
+Nodes (28): AGENT_PARTICIPANT_COLORS, INSIGHT_TYPE_COLORS, OUTCOME_DOT, SESSION_CHARACTER_COLORS, SOURCE_TOOL_COLORS, ActivityFeed(), FeedItem, insightTypeIcons (+20 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.14
-Nodes (14): Logo(), LogoProps, BOTTOM_TABS, HeaderProps, NAV_ITEMS, ProjectNav(), Sheet(), SheetContent() (+6 more)
+Cohesion: 0.10
+Nodes (25): Logo(), LogoProps, useMissingFacets(), FilterConfig, useFilterParams(), useInsights(), useProjects(), useSessions() (+17 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.15
-Nodes (18): SESSION_CHARACTER_COLORS, DRIVER_LABELS, DRIVER_STYLES, frictionBarColor(), getDominantDriver(), useFacetAggregation(), useReflectSnapshot(), useReflectWeeks() (+10 more)
+Cohesion: 0.23
+Nodes (12): useFacetAggregation(), useReflectSnapshot(), useReflectWeeks(), WeekInfo, formatRelativeDate(), getCurrentIsoWeek(), parseIsoWeekBounds(), PatternsPage() (+4 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.16
-Nodes (16): kebabToTitleCase(), levenshtein(), normalizeCategory(), NormalizerConfig, getPatternCategoryLabel(), normalizePatternCategory(), PATTERN_ALIASES, PATTERN_CATEGORY_LABELS (+8 more)
+Cohesion: 0.29
+Nodes (6): getSystemTheme(), Theme, ThemeContext, ThemeContextValue, ThemeProvider(), ThemeProviderProps
 
 ### Community 39 - "Community 39"
-Cohesion: 0.17
-Nodes (18): countVectors(), createAllVectorTables(), createVectorTable(), ENTITY_TABLES, findSimilar(), insertEmbedding(), insertEmbeddingsBatch(), querySimilar() (+10 more)
+Cohesion: 0.07
+Nodes (55): DedupMetrics, DeleteOptions, EMPTY_DEDUP_METRICS, insertInsightsBatch(), InsightRow, markInsightStale(), saveInsightsToDb(), saveInsightsToDbWithDedup() (+47 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.17
-Nodes (16): filterFilesToSync(), runSync(), SyncOptions, SyncResult, TrivialSession, updateSyncState(), getMigrationResult(), recalculateUsageStats() (+8 more)
+Cohesion: 0.21
+Nodes (16): filterFilesToSync(), runSync(), syncCommand(), SyncOptions, SyncResult, syncSingleFile(), TrivialSession, updateSyncState() (+8 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.50
 Nodes (4): Dashboard API Client, ConversationSearch, SessionDetailPanel, useSessions
 
 ### Community 42 - "Community 42"
-Cohesion: 0.17
-Nodes (16): ProfilePromptDialog(), ProfilePromptDialogProps, SESSION_CHARACTER_LABELS, useSaveLlmConfig(), isProfileComplete(), normalizeGithubUsername(), readStorage(), UserProfile (+8 more)
+Cohesion: 0.43
+Nodes (4): getCurrentProjectName(), openCommand(), OpenOptions, openUrl()
 
 ### Community 43 - "Community 43"
-Cohesion: 0.17
-Nodes (15): cleanTitle(), detectSessionCharacter(), EDIT_TOOLS, extractBugDescription(), extractFromUserMessage(), extractToolFilePath(), extractTopic(), generateCharacterTitle() (+7 more)
+Cohesion: 0.10
+Nodes (20): uninstallHookCommand(), cleanTitle(), detectSessionCharacter(), EDIT_TOOLS, extractBugDescription(), extractFromUserMessage(), extractToolFilePath(), extractTopic() (+12 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.21
+Cohesion: 0.20
 Nodes (17): isVerbose(), collectLexicalText(), CURSOR_MESSAGE_ARRAY_KEYS, CursorProvider, extractFilePath(), extractLexicalText(), extractMessages(), extractProjectPathFromBubbles() (+9 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.10
-Nodes (19): [1.0.2] - 2026-02-20, [2.1.0] - 2026-02-27, [3.0.2] - 2026-02-28, [3.1.1] - 2026-03-02, [3.4.1] - 2026-03-02, [3.6.1] - 2026-03-04, [4.0.1] - 2026-03-16, [4.6.1] - 2026-03-22 (+11 more)
+Cohesion: 0.11
+Nodes (18): [1.0.2] - 2026-02-20, [2.1.0] - 2026-02-27, [3.0.2] - 2026-02-28, [3.0.3] - 2026-02-28, [3.1.1] - 2026-03-02, [3.4.1] - 2026-03-02, [3.6.1] - 2026-03-04, [4.0.1] - 2026-03-16 (+10 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.18
-Nodes (18): disableAction(), enableAction(), MINIMAL_CONFIG, statusAction(), telemetryCommand, saveConfig(), buildEventPreview(), detectHook() (+10 more)
+Cohesion: 0.26
+Nodes (12): statusAction(), buildEventPreview(), detectHook(), detectProviders(), getCliVersion(), getPostHogClient(), getStableMachineId(), isTelemetryEnabled() (+4 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.14
-Nodes (15): AGENT_PARTICIPANT_COLORS, INSIGHT_TYPE_COLORS, SOURCE_TOOL_COLORS, ActivityFeed(), FeedItem, insightTypeIcons, insightTypeLabels, SessionFeedItem() (+7 more)
+Cohesion: 0.67
+Nodes (3): [4.6.1] - 2026-03-22, Added, Fixed
 
 ### Community 48 - "Community 48"
 Cohesion: 0.14
 Nodes (11): classifyCompileError(), createAIService(), defaultLogger(), GEPARunner, OptimizationError, OptimizationErrorKind, OptimizationLogEntry, OptimizationLogger (+3 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.19
-Nodes (16): sessionExists(), getStmts(), insertMessages(), insertSessionWithProject(), insertSessionWithProjectAndReturnIsNew(), insertSessionWithProjectInternal(), updateGlobalUsageStats(), upsertProject() (+8 more)
-
-### Community 50 - "Community 50"
-Cohesion: 0.25
-Nodes (11): createRateLimiter(), embedBatch(), EmbeddingError, embedOne(), embedTexts(), sleep(), BackfillStats, DEFAULT_EMBEDDING_CONFIG (+3 more)
-
-### Community 51 - "Community 51"
-Cohesion: 0.18
-Nodes (13): AnalyzeDropdown(), AnalysisCostData, AnalysisUsageRow, useAnalysisCost(), estimateAnalysisCost(), ESTIMATED_OUTPUT_TOKENS, formatCost(), formatEstimatedInputTokens() (+5 more)
+Cohesion: 0.21
+Nodes (14): sessionExists(), getStmts(), insertSessionWithProject(), insertSessionWithProjectInternal(), updateGlobalUsageStats(), upsertProject(), upsertSession(), CONFIG_DIR (+6 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.20
-Nodes (15): processQueue(), buildQueueCommand(), queueProcessCommand(), queuePruneCommand(), queueRetryCommand(), queueStatusCommand(), claimNext(), getQueueStatus() (+7 more)
-
-### Community 53 - "Community 53"
-Cohesion: 0.36
-Nodes (4): uninstallHookCommand(), OpenCodeProvider, OpenCodeProvider, getOpenCodeDir()
+Nodes (16): processQueue(), ProcessQueueOptions, buildQueueCommand(), queueProcessCommand(), queuePruneCommand(), queueRetryCommand(), queueStatusCommand(), claimNext() (+8 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.16
-Nodes (12): ContextBreakDivider(), ContextBreakDividerProps, InlineEventChip(), InlineEventChipProps, getAssistantConfig(), MessageBubble(), RawMessageBlock(), RawMessageBlockProps (+4 more)
+Cohesion: 0.07
+Nodes (40): TEAMMATE_BORDER_COLORS, TEAMMATE_DEFAULT_COLORS, ContextBreakDivider(), ContextBreakDividerProps, InlineEventChip(), InlineEventChipProps, AssistantMarkdown(), AssistantMarkdownProps (+32 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.23
-Nodes (13): ParseError, ParseResult, PromptQualityDimensionScores, PromptQualityFinding, PromptQualityResponse, PromptQualityTakeaway, buildResponsePreview(), extractJsonPayload() (+5 more)
+Cohesion: 0.13
+Nodes (20): convertPQToInsightRow(), convertToInsightRows(), SessionData, AnalysisResponse, ContentBlock, ParseError, ParseResult, PromptQualityDimensionScores (+12 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.27
@@ -405,16 +375,12 @@ Cohesion: 0.16
 Nodes (11): ChatConversation(), ChatConversationProps, ConversationSearchProps, DateSeparator(), DateSeparatorProps, LoadMoreSentinel(), LoadMoreSentinelProps, Message (+3 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.21
-Nodes (12): AnalysisCostUsage, applyGeneratedTitle(), FacetRow, loadSessionForAnalysis(), loadSessionMessages(), ProgressMessageFn, requireLLM(), streamBatchBackfill() (+4 more)
+Cohesion: 0.23
+Nodes (13): loadLLMConfig(), applyGeneratedTitle(), app, FacetRow, loadSessionForAnalysis(), loadSessionMessages(), ProgressMessageFn, requireLLM() (+5 more)
 
 ### Community 59 - "Community 59"
 Cohesion: 0.24
 Nodes (15): isLLMConfigured(), cosineSimilarity(), dotProduct(), findGroupsByVectorSimilarity(), findRecurringInsights(), findRecurringInsightsByLLM(), findRecurringInsightsByVector(), InsightEmbedding (+7 more)
-
-### Community 60 - "Community 60"
-Cohesion: 0.14
-Nodes (12): useExportGenerate(), InsightParams, useDeleteInsight(), deleteInsight(), ExportGenerateDepth, ExportGenerateFormat, ExportGenerateScope, fetchInsights() (+4 more)
 
 ### Community 61 - "Community 61"
 Cohesion: 0.29
@@ -444,10 +410,6 @@ Nodes (9): collectEventsFiles(), CopilotCliProvider, CopilotEvent, extractText()
 Cohesion: 0.23
 Nodes (10): createInsightProgram(), scalarizeScores(), ParetoPoint, GEPARunnerResult, args, BUILTIN_SAMPLES, parseResponse(), runDiagnostics() (+2 more)
 
-### Community 69 - "Community 69"
-Cohesion: 0.20
-Nodes (10): ExportGenerateState, ExportGenerateStatus, ExportParams, IDLE_STATE, useExportMarkdown(), ExportGenerateMetadata, ExportGenerateRequest, exportGenerateStream() (+2 more)
-
 ### Community 70 - "Community 70"
 Cohesion: 0.23
 Nodes (10): SearchInsightResult, SearchSessionResult, SearchHighlight(), SearchHighlightProps, formatRelativeDate(), INSIGHT_ICONS, InsightResultProps, InsightSearchResult() (+2 more)
@@ -464,14 +426,6 @@ Nodes (7): initTestDb(), MessageOverrides, mockChat, mockIsConfigured, SessionOv
 Cohesion: 0.18
 Nodes (4): initTestDb(), mockAnalyzePromptQuality, mockExtractFacetsOnly, mockIsLLMConfigured
 
-### Community 75 - "Community 75"
-Cohesion: 0.38
-Nodes (9): buildEmbeddingConfig(), buildEmbeddingsCommand(), embeddingsBackfillCommand(), embeddingsRecomputeCommand(), statusRowToInt(), backfillAll(), backfillEmbeddings(), updateStatus() (+1 more)
-
-### Community 76 - "Community 76"
-Cohesion: 0.24
-Nodes (9): TEAMMATE_BORDER_COLORS, TEAMMATE_DEFAULT_COLORS, AgentMessageBubble(), AgentMessageBubbleProps, getStatusBadgeClass(), TaskNotificationCard(), TeammateMessageCard(), ParsedAgentMessage (+1 more)
-
 ### Community 77 - "Community 77"
 Cohesion: 0.27
 Nodes (6): DiscoveredModel, discoverModels(), discoverOllamaModels(), app, PROVIDER_API_KEY_ENV, VALID_PROVIDERS
@@ -482,15 +436,11 @@ Nodes (6): initTestDb(), mockAnalyzePromptQuality, mockAnalyzeSession, mockFindR
 
 ### Community 79 - "Community 79"
 Cohesion: 0.33
-Nodes (8): CLI_ENTRY, readStdin(), sessionEndCommand(), SessionEndOptions, spawnWorker(), WORKER_LOG_PATH, syncSingleFile(), enqueue()
-
-### Community 80 - "Community 80"
-Cohesion: 0.33
-Nodes (8): classifyUserMessage(), extractCommandName(), extractTag(), parseAgentMessage(), ParsedTaskNotification, parseTaskNotification(), parseTeammateMessage(), UserMessageClass
+Nodes (8): CLI_ENTRY, readStdin(), sessionEndCommand(), SessionEndOptions, spawnWorker(), WORKER_LOG_PATH, enqueue(), getConfigDir()
 
 ### Community 81 - "Community 81"
-Cohesion: 0.42
-Nodes (7): getAllProviders(), getVersion(), printBanner(), purple, countAllSessions(), showWelcomeIfFirstRun(), touchWelcomeMarker()
+Cohesion: 0.38
+Nodes (8): getAllProviders(), getVersion(), printBanner(), purple, ensureConfigDir(), countAllSessions(), showWelcomeIfFirstRun(), touchWelcomeMarker()
 
 ### Community 82 - "Community 82"
 Cohesion: 0.25
@@ -500,10 +450,6 @@ Nodes (7): Code Insights - Recent Insights, Instructions, Output Format, Recent 
 Cohesion: 0.25
 Nodes (6): extractTopicsFromTranscript(), loadTrainingData(), runOptimize(), createGEPARunner(), runGEPAOptimization(), sampleData
 
-### Community 85 - "Community 85"
-Cohesion: 0.39
-Nodes (6): highlightString(), highlightText(), processNode(), UserMarkdown(), UserMarkdownProps, preprocessUserContent()
-
 ### Community 87 - "Community 87"
 Cohesion: 0.25
 Nodes (4): initTestDb(), mockChat, mockIsLLMConfigured, mockLoadLLMConfig
@@ -511,14 +457,6 @@ Nodes (4): initTestDb(), mockChat, mockIsLLMConfigured, mockLoadLLMConfig
 ### Community 88 - "Community 88"
 Cohesion: 0.25
 Nodes (6): ANALYSIS_FACETS_REQUIRED, ANALYSIS_RESPONSE_TOP_LEVEL_REQUIRED, DIMENSION_SCORES_REQUIRED, __dirname, PROMPT_QUALITY_RESPONSE_TOP_LEVEL_REQUIRED, schemasDir
-
-### Community 89 - "Community 89"
-Cohesion: 0.57
-Nodes (6): WeekInfo, parseIsoWeekBounds(), formatUtcDate(), formatWeekLabel(), WeekSelector(), WeekSelectorProps
-
-### Community 91 - "Community 91"
-Cohesion: 0.38
-Nodes (5): AssistantMarkdown(), AssistantMarkdownProps, CopyButton(), CopyButtonProps, preprocessInsightBlocks()
 
 ### Community 92 - "Community 92"
 Cohesion: 0.33
@@ -531,18 +469,6 @@ Nodes (5): [3.3.0] - 2026-03-02, Added, Changed, Fixed, Removed
 ### Community 95 - "Community 95"
 Cohesion: 0.40
 Nodes (5): [4.0.0] - 2026-03-16, Added, Changed, Fixed, Improved
-
-### Community 96 - "Community 96"
-Cohesion: 0.50
-Nodes (4): useAnalysisQueue(), useQueuedSessionIds(), AnalysisQueueStatus, fetchAnalysisQueue()
-
-### Community 97 - "Community 97"
-Cohesion: 0.60
-Nodes (4): hooksFile(), _mockOs, readSettings(), writeSettings()
-
-### Community 98 - "Community 98"
-Cohesion: 0.40
-Nodes (3): mockExecFileSync, mockUnlinkSync, mockWriteFileSync
 
 ### Community 99 - "Community 99"
 Cohesion: 0.50
@@ -605,24 +531,24 @@ Cohesion: 0.67
 Nodes (3): [4.7.0] - 2026-03-25, Added, Changed
 
 ## Knowledge Gaps
-- **426 isolated node(s):** `args`, `verbose`, `sampleIdx`, `BUILTIN_SAMPLES`, `SESSION` (+421 more)
+- **422 isolated node(s):** `args`, `verbose`, `sampleIdx`, `BUILTIN_SAMPLES`, `SESSION` (+417 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `parseJsonField()` connect `Community 13` to `Community 32`, `Community 35`, `Community 4`, `Community 7`, `Community 47`, `Community 20`, `Community 53`, `Community 54`, `Community 23`, `Community 22`, `Community 57`?**
-  _High betweenness centrality (0.279) - this node is a cross-community bridge._
-- **Why does `loadConfig()` connect `Community 31` to `Community 1`, `Community 2`, `Community 34`, `Community 4`, `Community 40`, `Community 46`, `Community 15`, `Community 19`, `Community 53`, `Community 56`?**
+- **Why does `parseJsonField()` connect `Community 13` to `Community 32`, `Community 35`, `Community 4`, `Community 7`, `Community 8`, `Community 10`, `Community 43`, `Community 54`, `Community 23`, `Community 57`?**
+  _High betweenness centrality (0.281) - this node is a cross-community bridge._
+- **Why does `loadConfig()` connect `Community 31` to `Community 1`, `Community 2`, `Community 34`, `Community 4`, `Community 42`, `Community 43`, `Community 46`, `Community 15`, `Community 19`, `Community 56`, `Community 58`?**
   _High betweenness centrality (0.185) - this node is a cross-community bridge._
-- **Why does `getDb()` connect `Community 28` to `Community 33`, `Community 2`, `Community 39`, `Community 40`, `Community 75`, `Community 15`, `Community 79`, `Community 49`, `Community 18`, `Community 19`, `Community 84`, `Community 52`, `Community 50`, `Community 24`, `Community 58`, `Community 59`, `Community 30`?**
+- **Why does `getDb()` connect `Community 39` to `Community 33`, `Community 2`, `Community 40`, `Community 15`, `Community 79`, `Community 49`, `Community 18`, `Community 19`, `Community 84`, `Community 52`, `Community 58`, `Community 59`, `Community 28`, `Community 30`?**
   _High betweenness centrality (0.117) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `getDb()` (e.g. with `retrieveRelatedInsights()` and `findGroupsByVectorSimilarity()`) actually correct?**
   _`getDb()` has 8 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 11 inferred relationships involving `runMigrations()` (e.g. with `initTestDb()` and `initTestDb()`) actually correct?**
   _`runMigrations()` has 11 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `args`, `verbose`, `sampleIdx` to the rest of the system?**
-  _426 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.1396011396011396 - nodes in this community are weakly interconnected._
+  _422 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Community 1` be split into smaller, more focused modules?**
+  _Cohesion score 0.1492063492063492 - nodes in this community are weakly interconnected._
