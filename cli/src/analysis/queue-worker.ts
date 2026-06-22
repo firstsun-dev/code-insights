@@ -15,6 +15,7 @@ import { runInsightsCommand } from '../commands/insights.js';
 import { ClaudeNativeRunner } from './native-runner.js';
 import { CodexNativeRunner } from './codex-runner.js';
 import { GeminiNativeRunner } from './gemini-runner.js';
+import { MistralVibeRunner } from './mistral-vibe-runner.js';
 import type { AnalysisRunner } from './runner-types.js';
 
 export interface ProcessQueueOptions {
@@ -25,6 +26,8 @@ export interface ProcessQueueOptions {
   useCodex?: boolean;
   /** Explicitly use gemini if 'native' runner is requested */
   useGemini?: boolean;
+  /** Explicitly use vibe if 'native' runner is requested */
+  useVibe?: boolean;
 }
 
 /**
@@ -47,10 +50,27 @@ export async function processQueue(options: ProcessQueueOptions = {}): Promise<n
   let claudeRunner: ClaudeNativeRunner | undefined;
   let codexRunner: CodexNativeRunner | undefined;
   let geminiRunner: GeminiNativeRunner | undefined;
+  let vibeRunner: MistralVibeRunner | undefined;
   
-  let currentNativeType: 'claude' | 'codex' | 'gemini' = options.useGemini ? 'gemini' : (options.useCodex ? 'codex' : 'claude');
+  let currentNativeType: 'claude' | 'codex' | 'gemini' | 'vibe' = 
+    options.useVibe ? 'vibe' : (options.useGemini ? 'gemini' : (options.useCodex ? 'codex' : 'claude'));
 
   const getNativeRunner = (): AnalysisRunner | undefined => {
+    if (currentNativeType === 'vibe') {
+      if (!vibeRunner) {
+        try {
+          MistralVibeRunner.validate();
+          vibeRunner = new MistralVibeRunner();
+        } catch {
+          // If vibe fails, try Gemini as next fallback
+          log(chalk.yellow(`[Code Insights] Mistral Vibe not found, trying Gemini fallback...`));
+          currentNativeType = 'gemini';
+          return getNativeRunner();
+        }
+      }
+      return vibeRunner;
+    }
+
     if (currentNativeType === 'gemini') {
       if (!geminiRunner) {
         try {
@@ -106,6 +126,7 @@ export async function processQueue(options: ProcessQueueOptions = {}): Promise<n
         native: isNative && currentNativeType === 'claude',
         codex: isNative && currentNativeType === 'codex',
         gemini: isNative && currentNativeType === 'gemini',
+        vibe: isNative && currentNativeType === 'vibe',
         quiet,
         _runner: runner,
       });
@@ -123,6 +144,9 @@ export async function processQueue(options: ProcessQueueOptions = {}): Promise<n
         } else if (currentNativeType === 'codex') {
           log(chalk.yellow(`[Code Insights] Codex limit reached during queue processing. Switching to Gemini...`));
           currentNativeType = 'gemini';
+        } else if (currentNativeType === 'gemini') {
+          log(chalk.yellow(`[Code Insights] Gemini limit reached during queue processing. Switching to Mistral Vibe...`));
+          currentNativeType = 'vibe';
         }
       }
 
