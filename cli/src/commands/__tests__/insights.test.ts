@@ -54,13 +54,13 @@ vi.mock('../../analysis/codex-runner.js', () => {
   return { CodexNativeRunner: MockCodexRunner };
 });
 
-vi.mock('../../analysis/gemini-runner.js', () => {
-  class MockGeminiRunner {
-    readonly name = 'gemini-native';
+vi.mock('../../analysis/antigravity-runner.js', () => {
+  class MockAntigravityRunner {
+    readonly name = 'antigravity-native';
     runAnalysis = mockRunAnalysis;
     static validate = mockValidate;
   }
-  return { GeminiNativeRunner: MockGeminiRunner };
+  return { AntigravityNativeRunner: MockAntigravityRunner };
 });
 
 const mockFromConfig = vi.fn();

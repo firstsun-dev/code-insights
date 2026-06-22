@@ -1,39 +1,40 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { AntigravityProvider } from '../antigravity.js';
 
+// Mock fs
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    readdirSync: vi.fn(),
+    readFileSync: vi.fn(),
+    createReadStream: vi.fn(),
+    statSync: vi.fn(),
+  };
+});
+
 describe('AntigravityProvider', () => {
-  it('should discover .pb session files in ~/.gemini/antigravity/conversations', async () => {
-    const provider = new AntigravityProvider();
-    const sessions = await provider.discover();
-    
-    expect(sessions.length).toBeGreaterThan(0);
-    expect(sessions[0]).toMatch(/\.pb$/);
-    expect(sessions[0]).toContain('.gemini/antigravity/conversations');
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('should parse a session if brain directory exists', async () => {
+  it('should discover both .pb and .db files in ~/.gemini/antigravity-cli/conversations', async () => {
     const provider = new AntigravityProvider();
+    
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'session-1.pb' as any,
+      'session-2.db' as any,
+      'other.txt' as any
+    ]);
+
     const sessions = await provider.discover();
-    
-    // Find a session that has a brain directory
-    let parsedSession = null;
-    for (const sessionPath of sessions) {
-      parsedSession = await provider.parse(sessionPath);
-      if (parsedSession) break;
-    }
-    
-    if (parsedSession) {
-      expect(parsedSession.id).toBeDefined();
-      expect(parsedSession.sourceTool).toBe('antigravity');
-      expect(parsedSession.messages.length).toBeGreaterThan(0);
-      console.log(`Successfully parsed session: ${parsedSession.id}`);
-      console.log(`Project: ${parsedSession.projectName}`);
-      console.log(`Title: ${parsedSession.generatedTitle}`);
-    } else {
-      console.warn('No sessions with brain directories found to test parsing');
-    }
+    expect(sessions.length).toBe(2);
+    expect(sessions[0]).toMatch(/\.pb$/);
+    expect(sessions[1]).toMatch(/\.db$/);
+    expect(sessions[0]).toContain('.gemini/antigravity-cli/conversations');
   });
 });

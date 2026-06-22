@@ -22,7 +22,7 @@ import { dirname, join } from 'path';
 import { getDb } from '../db/client.js';
 import { ClaudeNativeRunner } from '../analysis/native-runner.js';
 import { CodexNativeRunner } from '../analysis/codex-runner.js';
-import { GeminiNativeRunner } from '../analysis/gemini-runner.js';
+import { AntigravityNativeRunner } from '../analysis/antigravity-runner.js';
 import { MistralVibeRunner } from '../analysis/mistral-vibe-runner.js';
 import { ProviderRunner } from '../analysis/provider-runner.js';
 import {
@@ -121,7 +121,7 @@ export interface InsightsCommandOptions {
   sessionId: string;
   native: boolean;
   codex?: boolean;
-  gemini?: boolean;
+  antigravity?: boolean;
   vibe?: boolean;
   hookMode?: boolean;
   force?: boolean;
@@ -143,9 +143,9 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
   } else if (options.vibe) {
     MistralVibeRunner.validate();
     runner = new MistralVibeRunner();
-  } else if (options.gemini) {
-    GeminiNativeRunner.validate();
-    runner = new GeminiNativeRunner();
+  } else if (options.antigravity) {
+    AntigravityNativeRunner.validate();
+    runner = new AntigravityNativeRunner();
   } else if (options.codex) {
     CodexNativeRunner.validate();
     runner = new CodexNativeRunner();
@@ -166,13 +166,13 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
     runner = ProviderRunner.fromConfig();
   }
 
-  // Helper to run analysis with multi-level fallback (Codex -> Claude -> Gemini -> Vibe)
+  // Helper to run analysis with multi-level fallback (Codex -> Claude -> Antigravity -> Vibe)
   const performAnalysis = async (params: { systemPrompt: string; userPrompt: string; jsonSchema?: object }) => {
     try {
       return await runner.runAnalysis(params);
     } catch (err: any) {
       // If using general 'native' mode (not forced to a specific runner)
-      if (options.native && !options.codex && !options.gemini && !options.vibe) {
+      if (options.native && !options.codex && !options.antigravity && !options.vibe) {
         // Fallback 1: Codex -> Claude
         if (runner.name === 'codex-native' && err.message.includes('usage limit reached')) {
           log(chalk.yellow(`[Code Insights] Codex usage limit reached, falling back to Claude...`));
@@ -181,25 +181,25 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
             const fallbackRunner = new ClaudeNativeRunner();
             return await fallbackRunner.runAnalysis(params);
           } catch (fallbackErr: any) {
-            log(chalk.yellow(`[Code Insights] Fallback to Claude failed: ${fallbackErr.message}. Trying Gemini...`));
+            log(chalk.yellow(`[Code Insights] Fallback to Claude failed: ${fallbackErr.message}. Trying Antigravity...`));
             // Fall through to next fallback
           }
         }
 
-        // Fallback 2: (Codex OR Claude) -> Gemini
+        // Fallback 2: (Codex OR Claude) -> Antigravity
         if (runner.name === 'codex-native' || runner.name === 'claude-code-native') {
           try {
-            GeminiNativeRunner.validate();
-            const fallbackRunner = new GeminiNativeRunner();
+            AntigravityNativeRunner.validate();
+            const fallbackRunner = new AntigravityNativeRunner();
             return await fallbackRunner.runAnalysis(params);
           } catch (fallbackErr: any) {
-            log(chalk.yellow(`[Code Insights] Fallback to Gemini failed: ${fallbackErr.message}. Trying Mistral Vibe...`));
+            log(chalk.yellow(`[Code Insights] Fallback to Antigravity failed: ${fallbackErr.message}. Trying Mistral Vibe...`));
             // Fall through to next fallback
           }
         }
 
-        // Fallback 3: (Codex OR Claude OR Gemini) -> Vibe
-        if (runner.name === 'codex-native' || runner.name === 'claude-code-native' || runner.name === 'gemini-native') {
+        // Fallback 3: (Codex OR Claude OR Antigravity) -> Vibe
+        if (runner.name === 'codex-native' || runner.name === 'claude-code-native' || runner.name === 'antigravity-native') {
           try {
             MistralVibeRunner.validate();
             const fallbackRunner = new MistralVibeRunner();
@@ -369,7 +369,7 @@ export async function insightsCommand(
   opts: {
     native?: boolean;
     codex?: boolean;
-    gemini?: boolean;
+    antigravity?: boolean;
     vibe?: boolean;
     hook?: boolean;
     source?: string;
@@ -415,7 +415,7 @@ export async function insightsCommand(
       sessionId: resolvedSessionId,
       native: opts.native ?? false,
       codex: opts.codex ?? false,
-      gemini: opts.gemini ?? false,
+      antigravity: opts.antigravity ?? false,
       vibe: opts.vibe ?? false,
       hookMode: opts.hook ?? false,
       force: opts.force ?? false,
@@ -441,7 +441,7 @@ export async function insightsCheckCommand(opts: {
   analyze?: boolean;
   native?: boolean;
   codex?: boolean;
-  gemini?: boolean;
+  antigravity?: boolean;
   vibe?: boolean;
 }): Promise<void> {
   const days = opts.days ?? 7;
@@ -478,13 +478,13 @@ export async function insightsCheckCommand(opts: {
     // --analyze: process all found sessions with progress output
     if (analyze || count <= 2) {
       let runner: AnalysisRunner | undefined;
-      type RunnerType = 'claude' | 'codex' | 'gemini' | 'vibe' | 'provider';
+      type RunnerType = 'claude' | 'codex' | 'antigravity' | 'vibe' | 'provider';
 
       const initializeRunner = (type: RunnerType): AnalysisRunner | undefined => {
         try {
-          if (type === 'gemini') {
-            GeminiNativeRunner.validate();
-            return new GeminiNativeRunner();
+          if (type === 'antigravity') {
+            AntigravityNativeRunner.validate();
+            return new AntigravityNativeRunner();
           } else if (type === 'codex') {
             CodexNativeRunner.validate();
             return new CodexNativeRunner();
@@ -511,8 +511,8 @@ export async function insightsCheckCommand(opts: {
       if (analyze) {
         // Determine initial runner type
         let currentRunnerType: RunnerType;
-        if (opts.gemini) {
-          currentRunnerType = 'gemini';
+        if (opts.antigravity) {
+          currentRunnerType = 'antigravity';
         } else if (opts.codex) {
           currentRunnerType = 'codex';
         } else if (opts.vibe) {
@@ -525,22 +525,22 @@ export async function insightsCheckCommand(opts: {
 
         runner = initializeRunner(currentRunnerType);
 
-        // Fallback logic for native modes: Claude -> Codex -> Gemini -> Vibe
-        if (!runner && (opts.native || opts.codex || opts.gemini || opts.vibe)) {
+        // Fallback logic for native modes: Claude -> Codex -> Antigravity -> Vibe
+        if (!runner && (opts.native || opts.codex || opts.antigravity || opts.vibe)) {
           // If we started with claude or provider (as default for --native), try Codex
-          if (currentRunnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini && !opts.vibe)) {
+          if (currentRunnerType === 'claude' || (opts.native && !opts.codex && !opts.antigravity && !opts.vibe)) {
             log(chalk.yellow(`[Code Insights] Falling back to Codex...`));
             currentRunnerType = 'codex';
             runner = initializeRunner('codex');
           }
-          // If we still have no runner and were trying codex (or just started there), try Gemini
+          // If we still have no runner and were trying codex (or just started there), try Antigravity
           if (!runner && currentRunnerType === 'codex') {
-            log(chalk.yellow(`[Code Insights] Falling back to Gemini...`));
-            currentRunnerType = 'gemini';
-            runner = initializeRunner('gemini');
+            log(chalk.yellow(`[Code Insights] Falling back to Antigravity...`));
+            currentRunnerType = 'antigravity';
+            runner = initializeRunner('antigravity');
           }
-          // If we still have no runner and were trying gemini, try Vibe
-          if (!runner && currentRunnerType === 'gemini') {
+          // If we still have no runner and were trying antigravity, try Vibe
+          if (!runner && currentRunnerType === 'antigravity') {
             log(chalk.yellow(`[Code Insights] Falling back to Mistral Vibe...`));
             currentRunnerType = 'vibe';
             runner = initializeRunner('vibe');
@@ -564,7 +564,7 @@ export async function insightsCheckCommand(opts: {
               sessionId: row.id, 
               native: currentRunnerType === 'claude', 
               codex: currentRunnerType === 'codex', 
-              gemini: currentRunnerType === 'gemini',
+              antigravity: currentRunnerType === 'antigravity',
               vibe: currentRunnerType === 'vibe',
               quiet: true, 
               _runner: runner 
@@ -585,7 +585,7 @@ export async function insightsCheckCommand(opts: {
       // Auto-analyze silently when 1-2 unanalyzed sessions
       if (count <= 2) {
         let runnerType: RunnerType;
-        if (opts.gemini) runnerType = 'gemini';
+        if (opts.antigravity) runnerType = 'antigravity';
         else if (opts.codex) runnerType = 'codex';
         else if (opts.vibe) runnerType = 'vibe';
         else if (opts.native) runnerType = 'claude';
@@ -594,16 +594,16 @@ export async function insightsCheckCommand(opts: {
         runner = initializeRunner(runnerType);
         
         // Fallback for auto-analyze
-        if (!runner && (opts.native || opts.codex || opts.gemini || opts.vibe)) {
-          if (runnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini && !opts.vibe)) {
+        if (!runner && (opts.native || opts.codex || opts.antigravity || opts.vibe)) {
+          if (runnerType === 'claude' || (opts.native && !opts.codex && !opts.antigravity && !opts.vibe)) {
             runnerType = 'codex';
             runner = initializeRunner('codex');
           }
           if (!runner && runnerType === 'codex') {
-            runnerType = 'gemini';
-            runner = initializeRunner('gemini');
+            runnerType = 'antigravity';
+            runner = initializeRunner('antigravity');
           }
-          if (!runner && runnerType === 'gemini') {
+          if (!runner && runnerType === 'antigravity') {
             runnerType = 'vibe';
             runner = initializeRunner('vibe');
           }
@@ -616,7 +616,7 @@ export async function insightsCheckCommand(opts: {
                 sessionId: row.id, 
                 native: runnerType === 'claude',
                 codex: runnerType === 'codex',
-                gemini: runnerType === 'gemini',
+                antigravity: runnerType === 'antigravity',
                 vibe: runnerType === 'vibe',
                 quiet: true,
                 _runner: runner

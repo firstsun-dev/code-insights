@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { GeminiNativeRunner } from '../gemini-runner.js';
+import { AntigravityNativeRunner } from '../antigravity-runner.js';
 
 // Mock child_process
 vi.mock('child_process', () => ({
@@ -9,28 +9,18 @@ vi.mock('child_process', () => ({
 
 const mockedExecFileSync = vi.mocked(execFileSync);
 
-describe('GeminiNativeRunner', () => {
+describe('AntigravityNativeRunner', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('has the correct runner name', () => {
-    const runner = new GeminiNativeRunner();
-    expect(runner.name).toBe('gemini-native');
+    const runner = new AntigravityNativeRunner();
+    expect(runner.name).toBe('antigravity-native');
   });
 
-  it('calls gemini -p with correct args', async () => {
-    const runner = new GeminiNativeRunner();
-    const mockJson = JSON.stringify({
-      response: '{"summary": "test"}',
-      stats: {
-        models: {
-          'gemini-flash': {
-            tokens: { input: 100, candidates: 50 }
-          }
-        }
-      }
-    });
-    
-    mockedExecFileSync.mockReturnValue(mockJson);
+  it('calls agy -p with correct args', async () => {
+    const runner = new AntigravityNativeRunner();
+    const mockOutput = '{"summary": "test"}';
+    mockedExecFileSync.mockReturnValue(mockOutput);
 
     const result = await runner.runAnalysis({
       systemPrompt: 'sys',
@@ -38,8 +28,8 @@ describe('GeminiNativeRunner', () => {
     });
 
     expect(mockedExecFileSync).toHaveBeenCalledWith(
-      'gemini',
-      expect.arrayContaining(['-p', '-', '-o', 'json', '--approval-mode', 'plan']),
+      'agy',
+      expect.arrayContaining(['-p', '-', '--dangerously-skip-permissions']),
       expect.objectContaining({
         input: expect.stringContaining('sys'),
         encoding: 'utf-8',
@@ -48,13 +38,13 @@ describe('GeminiNativeRunner', () => {
       })
     );
     expect(result.rawJson).toBe('{"summary": "test"}');
-    expect(result.inputTokens).toBe(100);
-    expect(result.outputTokens).toBe(50);
+    expect(result.inputTokens).toBe(0);
+    expect(result.outputTokens).toBe(0);
   });
 
   it('strips <json> tags and leading text', async () => {
-    const runner = new GeminiNativeRunner();
-    const mockResponse = 'Some leading info text...\n{"response": "<json>{\\"test\\": true}</json>"}';
+    const runner = new AntigravityNativeRunner();
+    const mockResponse = 'Some leading info text...\n<json>{"test": true}</json>';
     mockedExecFileSync.mockReturnValue(mockResponse);
 
     const result = await runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' });
@@ -62,12 +52,12 @@ describe('GeminiNativeRunner', () => {
   });
 
   it('throws on usage limit error in stderr', async () => {
-    const runner = new GeminiNativeRunner();
+    const runner = new AntigravityNativeRunner();
     const err: any = new Error('Command failed');
     err.stderr = Buffer.from('rateLimitExceeded');
     mockedExecFileSync.mockImplementation(() => { throw err; });
 
     await expect(runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' }))
-      .rejects.toThrow(/Gemini CLI usage limit reached/);
+      .rejects.toThrow(/Antigravity CLI usage limit reached/);
   });
 });

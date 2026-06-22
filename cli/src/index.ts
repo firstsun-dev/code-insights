@@ -131,7 +131,7 @@ program
   .description('Internal: Claude Code SessionEnd hook entry point')
   .option('--no-native', 'Use configured provider instead of claude -p')
   .option('--codex', 'Use codex exec fallback')
-  .option('--gemini', 'Use gemini -p fallback')
+  .option('--antigravity', 'Use antigravity -p fallback')
   .option('--vibe', 'Use vibe CLI fallback')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('-q, --quiet', 'Suppress output')
@@ -139,7 +139,7 @@ program
     await sessionEndCommand({ 
       native: opts.native, 
       codex: opts.codex, 
-      gemini: opts.gemini,
+      antigravity: opts.antigravity,
       vibe: opts.vibe,
       source: opts.source, 
       quiet: opts.quiet 
@@ -153,7 +153,7 @@ const insightsCmd = program
   .description('Analyze a session with AI — extracts insights and prompt quality score')
   .option('--native', 'Use claude -p (your Claude subscription, no API key required)')
   .option('--codex', 'Use codex exec (OpenAI Codex, no API key required)')
-  .option('--gemini', 'Use gemini -p (Google Gemini CLI, no API key required)')
+  .option('--antigravity', 'Use antigravity -p (Google Antigravity CLI, no API key required)')
   .option('--vibe', 'Use vibe CLI (Mistral Vibe, no API key required)')
   .option('--hook', 'Read session context from stdin (for Claude Code SessionEnd hook)')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
@@ -171,7 +171,7 @@ insightsCmd
   .option('--analyze', 'Process all found sessions sequentially')
   .option('--native', 'Use native runner (claude -p) for batch analysis')
   .option('--codex', 'Use codex exec for batch analysis')
-  .option('--gemini', 'Use gemini -p for batch analysis')
+  .option('--antigravity', 'Use antigravity -p for batch analysis')
   .option('--vibe', 'Use vibe CLI for batch analysis')
   .action(async (opts, cmd) => {
     const parentOpts = cmd.parent?.opts() || {};
@@ -181,7 +181,7 @@ insightsCmd
       analyze: opts.analyze,
       native: opts.native ?? parentOpts.native,
       codex: opts.codex ?? parentOpts.codex,
-      gemini: opts.gemini ?? parentOpts.gemini,
+      antigravity: opts.antigravity ?? parentOpts.antigravity,
       vibe: opts.vibe ?? parentOpts.vibe,
     });
   });
