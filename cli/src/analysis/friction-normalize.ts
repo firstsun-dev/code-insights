@@ -48,7 +48,7 @@ const FRICTION_ALIASES: Record<string, string> = {
  * Note: alias targets in FRICTION_ALIASES bypass the canonical check intentionally.
  * e.g., "agent-orchestration-failure" is not canonical but is a valid cluster target.
  */
-export function normalizeFrictionCategory(category: string): string {
+export function normalizeFrictionCategory(category: string | null | undefined): string {
   return normalizeCategory(category, {
     canonicalCategories: CANONICAL_FRICTION_CATEGORIES,
     aliases: FRICTION_ALIASES,

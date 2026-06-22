@@ -132,6 +132,7 @@ program
   .option('--no-native', 'Use configured provider instead of claude -p')
   .option('--codex', 'Use codex exec fallback')
   .option('--gemini', 'Use gemini -p fallback')
+  .option('--vibe', 'Use vibe CLI fallback')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('-q, --quiet', 'Suppress output')
   .action(async (opts) => {
@@ -139,6 +140,7 @@ program
       native: opts.native, 
       codex: opts.codex, 
       gemini: opts.gemini,
+      vibe: opts.vibe,
       source: opts.source, 
       quiet: opts.quiet 
     });
@@ -152,6 +154,7 @@ const insightsCmd = program
   .option('--native', 'Use claude -p (your Claude subscription, no API key required)')
   .option('--codex', 'Use codex exec (OpenAI Codex, no API key required)')
   .option('--gemini', 'Use gemini -p (Google Gemini CLI, no API key required)')
+  .option('--vibe', 'Use vibe CLI (Mistral Vibe, no API key required)')
   .option('--hook', 'Read session context from stdin (for Claude Code SessionEnd hook)')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('--force', 'Re-analyze even if already analyzed at this session length')
@@ -169,6 +172,7 @@ insightsCmd
   .option('--native', 'Use native runner (claude -p) for batch analysis')
   .option('--codex', 'Use codex exec for batch analysis')
   .option('--gemini', 'Use gemini -p for batch analysis')
+  .option('--vibe', 'Use vibe CLI for batch analysis')
   .action(async (opts, cmd) => {
     const parentOpts = cmd.parent?.opts() || {};
     await insightsCheckCommand({
@@ -178,6 +182,7 @@ insightsCmd
       native: opts.native ?? parentOpts.native,
       codex: opts.codex ?? parentOpts.codex,
       gemini: opts.gemini ?? parentOpts.gemini,
+      vibe: opts.vibe ?? parentOpts.vibe,
     });
   });
 

@@ -23,6 +23,7 @@ import { getDb } from '../db/client.js';
 import { ClaudeNativeRunner } from '../analysis/native-runner.js';
 import { CodexNativeRunner } from '../analysis/codex-runner.js';
 import { GeminiNativeRunner } from '../analysis/gemini-runner.js';
+import { MistralVibeRunner } from '../analysis/mistral-vibe-runner.js';
 import { ProviderRunner } from '../analysis/provider-runner.js';
 import {
   SHARED_ANALYST_SYSTEM_PROMPT,
@@ -121,6 +122,7 @@ export interface InsightsCommandOptions {
   native: boolean;
   codex?: boolean;
   gemini?: boolean;
+  vibe?: boolean;
   hookMode?: boolean;
   force?: boolean;
   quiet?: boolean;
@@ -138,6 +140,9 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
   let runner: AnalysisRunner;
   if (options._runner) {
     runner = options._runner;
+  } else if (options.vibe) {
+    MistralVibeRunner.validate();
+    runner = new MistralVibeRunner();
   } else if (options.gemini) {
     GeminiNativeRunner.validate();
     runner = new GeminiNativeRunner();
@@ -161,13 +166,13 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
     runner = ProviderRunner.fromConfig();
   }
 
-  // Helper to run analysis with multi-level fallback (Codex -> Claude -> Gemini)
+  // Helper to run analysis with multi-level fallback (Codex -> Claude -> Gemini -> Vibe)
   const performAnalysis = async (params: { systemPrompt: string; userPrompt: string; jsonSchema?: object }) => {
     try {
       return await runner.runAnalysis(params);
     } catch (err: any) {
       // If using general 'native' mode (not forced to a specific runner)
-      if (options.native && !options.codex && !options.gemini) {
+      if (options.native && !options.codex && !options.gemini && !options.vibe) {
         // Fallback 1: Codex -> Claude
         if (runner.name === 'codex-native' && err.message.includes('usage limit reached')) {
           log(chalk.yellow(`[Code Insights] Codex usage limit reached, falling back to Claude...`));
@@ -186,6 +191,18 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
           try {
             GeminiNativeRunner.validate();
             const fallbackRunner = new GeminiNativeRunner();
+            return await fallbackRunner.runAnalysis(params);
+          } catch (fallbackErr: any) {
+            log(chalk.yellow(`[Code Insights] Fallback to Gemini failed: ${fallbackErr.message}. Trying Mistral Vibe...`));
+            // Fall through to next fallback
+          }
+        }
+
+        // Fallback 3: (Codex OR Claude OR Gemini) -> Vibe
+        if (runner.name === 'codex-native' || runner.name === 'claude-code-native' || runner.name === 'gemini-native') {
+          try {
+            MistralVibeRunner.validate();
+            const fallbackRunner = new MistralVibeRunner();
             return await fallbackRunner.runAnalysis(params);
           } catch (fallbackErr: any) {
             throw new Error(`Fallback system exhausted. Original error: ${err.message}. Last fallback error: ${fallbackErr.message}`);
@@ -353,6 +370,7 @@ export async function insightsCommand(
     native?: boolean;
     codex?: boolean;
     gemini?: boolean;
+    vibe?: boolean;
     hook?: boolean;
     source?: string;
     force?: boolean;
@@ -398,6 +416,7 @@ export async function insightsCommand(
       native: opts.native ?? false,
       codex: opts.codex ?? false,
       gemini: opts.gemini ?? false,
+      vibe: opts.vibe ?? false,
       hookMode: opts.hook ?? false,
       force: opts.force ?? false,
       quiet,
@@ -423,6 +442,7 @@ export async function insightsCheckCommand(opts: {
   native?: boolean;
   codex?: boolean;
   gemini?: boolean;
+  vibe?: boolean;
 }): Promise<void> {
   const days = opts.days ?? 7;
   const quiet = opts.quiet ?? false;
@@ -458,7 +478,7 @@ export async function insightsCheckCommand(opts: {
     // --analyze: process all found sessions with progress output
     if (analyze || count <= 2) {
       let runner: AnalysisRunner | undefined;
-      type RunnerType = 'claude' | 'codex' | 'gemini' | 'provider';
+      type RunnerType = 'claude' | 'codex' | 'gemini' | 'vibe' | 'provider';
 
       const initializeRunner = (type: RunnerType): AnalysisRunner | undefined => {
         try {
@@ -471,6 +491,9 @@ export async function insightsCheckCommand(opts: {
           } else if (type === 'claude') {
             ClaudeNativeRunner.validate();
             return new ClaudeNativeRunner();
+          } else if (type === 'vibe') {
+            MistralVibeRunner.validate();
+            return new MistralVibeRunner();
           } else {
             try {
               return ProviderRunner.fromConfig();
@@ -492,6 +515,8 @@ export async function insightsCheckCommand(opts: {
           currentRunnerType = 'gemini';
         } else if (opts.codex) {
           currentRunnerType = 'codex';
+        } else if (opts.vibe) {
+          currentRunnerType = 'vibe';
         } else if (opts.native) {
           currentRunnerType = 'claude';
         } else {
@@ -500,10 +525,10 @@ export async function insightsCheckCommand(opts: {
 
         runner = initializeRunner(currentRunnerType);
 
-        // Fallback logic for native modes: Claude -> Codex -> Gemini
-        if (!runner && (opts.native || opts.codex || opts.gemini)) {
+        // Fallback logic for native modes: Claude -> Codex -> Gemini -> Vibe
+        if (!runner && (opts.native || opts.codex || opts.gemini || opts.vibe)) {
           // If we started with claude or provider (as default for --native), try Codex
-          if (currentRunnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini)) {
+          if (currentRunnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini && !opts.vibe)) {
             log(chalk.yellow(`[Code Insights] Falling back to Codex...`));
             currentRunnerType = 'codex';
             runner = initializeRunner('codex');
@@ -513,6 +538,12 @@ export async function insightsCheckCommand(opts: {
             log(chalk.yellow(`[Code Insights] Falling back to Gemini...`));
             currentRunnerType = 'gemini';
             runner = initializeRunner('gemini');
+          }
+          // If we still have no runner and were trying gemini, try Vibe
+          if (!runner && currentRunnerType === 'gemini') {
+            log(chalk.yellow(`[Code Insights] Falling back to Mistral Vibe...`));
+            currentRunnerType = 'vibe';
+            runner = initializeRunner('vibe');
           }
         }
 
@@ -534,6 +565,7 @@ export async function insightsCheckCommand(opts: {
               native: currentRunnerType === 'claude', 
               codex: currentRunnerType === 'codex', 
               gemini: currentRunnerType === 'gemini',
+              vibe: currentRunnerType === 'vibe',
               quiet: true, 
               _runner: runner 
             });
@@ -555,20 +587,25 @@ export async function insightsCheckCommand(opts: {
         let runnerType: RunnerType;
         if (opts.gemini) runnerType = 'gemini';
         else if (opts.codex) runnerType = 'codex';
+        else if (opts.vibe) runnerType = 'vibe';
         else if (opts.native) runnerType = 'claude';
         else runnerType = 'provider';
 
         runner = initializeRunner(runnerType);
         
         // Fallback for auto-analyze
-        if (!runner && (opts.native || opts.codex || opts.gemini)) {
-          if (runnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini)) {
+        if (!runner && (opts.native || opts.codex || opts.gemini || opts.vibe)) {
+          if (runnerType === 'claude' || (opts.native && !opts.codex && !opts.gemini && !opts.vibe)) {
             runnerType = 'codex';
             runner = initializeRunner('codex');
           }
           if (!runner && runnerType === 'codex') {
             runnerType = 'gemini';
             runner = initializeRunner('gemini');
+          }
+          if (!runner && runnerType === 'gemini') {
+            runnerType = 'vibe';
+            runner = initializeRunner('vibe');
           }
         }
 
@@ -580,8 +617,9 @@ export async function insightsCheckCommand(opts: {
                 native: runnerType === 'claude',
                 codex: runnerType === 'codex',
                 gemini: runnerType === 'gemini',
-                quiet: true, 
-                _runner: runner 
+                vibe: runnerType === 'vibe',
+                quiet: true,
+                _runner: runner
               });
             } catch {
               // Silently ignore auto-analyze errors for 1-2 sessions
