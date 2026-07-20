@@ -15,6 +15,7 @@
 import { jsonrepair } from 'jsonrepair';
 import { createLLMClient, isLLMConfigured, loadLLMConfig } from './client.js';
 import type { SQLiteMessageRow, AnalysisResponse } from './prompt-types.js';
+import type { RelatedInsight } from './prompts.js';
 import { formatMessagesForAnalysis } from './message-format.js';
 import { extractJsonPayload, parseAnalysisResponse } from './response-parsers.js';
 import {
@@ -42,6 +43,12 @@ import {
 } from './analysis-internal.js';
 import { calculateAnalysisCost } from './analysis-pricing.js';
 import { saveAnalysisUsage } from './analysis-usage-db.js';
+import { getDb } from '@code-insights/cli/db/client';
+import { loadConfig } from '@code-insights/cli/utils/config';
+import * as sqliteVec from 'sqlite-vec';
+import { embedOne, DEFAULT_EMBEDDING_CONFIG } from '@code-insights/cli/embeddings/client';
+import { loadVectorExtension, querySimilarFiltered } from '@code-insights/cli/embeddings/store';
+import type { EmbeddingConfig } from '@code-insights/cli/embeddings/types';
 
 // Re-export from sub-modules so existing imports of these from analysis.ts keep working.
 export { analyzePromptQuality } from './prompt-quality-analysis.js';
@@ -87,6 +94,18 @@ export async function analyzeSession(
     const estimatedTokens = client.estimateTokens(formattedMessages);
     const sessionMeta = buildSessionMeta(session);
 
+    // Retrieve related insights for RAG context (AutoRefine pattern)
+    const retrievalConfig = getRetrievalConfig();
+    const embeddingConfig: EmbeddingConfig = {
+      ...DEFAULT_EMBEDDING_CONFIG,
+    };
+    const relatedInsights = await retrieveRelatedInsights(
+      session,
+      formattedMessages,
+      embeddingConfig,
+      retrievalConfig,
+    );
+
     let analysisResponse: AnalysisResponse;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -110,7 +129,7 @@ export async function analyzeSession(
           { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
           { role: 'user', content: [
             buildCacheableConversationBlock(chunkFormatted),
-            { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta) },
+            { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
           ] },
         ], { signal: options?.signal });
 
@@ -152,7 +171,7 @@ export async function analyzeSession(
             { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
             { role: 'user', content: [
               buildCacheableConversationBlock(facetMessages),
-              { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta) },
+              { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
             ] },
           ], { signal: options?.signal });
 
@@ -186,7 +205,7 @@ export async function analyzeSession(
         { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
         { role: 'user', content: [
           buildCacheableConversationBlock(formattedMessages),
-          { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta) },
+          { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
         ] },
       ], { signal: options?.signal });
 
@@ -274,6 +293,127 @@ export async function analyzeSession(
       error: error instanceof Error ? error.message : 'Analysis failed',
       error_type: 'api_error',
     };
+  }
+}
+
+// --- Retrieval-augmented insight generation ---
+
+interface RetrievalConfig {
+  enabled: boolean;
+  topK: number;
+  similarityThreshold: number;
+  sameProjectOnly: boolean;
+}
+
+const DEFAULT_RETRIEVAL_CONFIG: RetrievalConfig = {
+  enabled: true,
+  topK: 5,
+  similarityThreshold: 0.75,
+  sameProjectOnly: true,
+};
+
+function getRetrievalConfig(): RetrievalConfig {
+  const config = loadConfig();
+  const retrieval = config?.dashboard?.analysis?.retrieval;
+  return {
+    enabled: retrieval?.enabled ?? DEFAULT_RETRIEVAL_CONFIG.enabled,
+    topK: retrieval?.topK ?? DEFAULT_RETRIEVAL_CONFIG.topK,
+    similarityThreshold: retrieval?.similarityThreshold ?? DEFAULT_RETRIEVAL_CONFIG.similarityThreshold,
+    sameProjectOnly: retrieval?.sameProjectOnly ?? DEFAULT_RETRIEVAL_CONFIG.sameProjectOnly,
+  };
+}
+
+/**
+ * Retrieve semantically similar past insights for the same project.
+ *
+ * 1. Embed the session's formatted messages (or use pre-computed session embedding)
+ * 2. Query sqlite-vec for top-K similar past insights
+ * 3. Filter by same project_id for relevance
+ * 4. Apply similarity threshold
+ * 5. Return as RelatedInsight[] for prompt injection
+ */
+async function retrieveRelatedInsights(
+  session: { id: string; project_id: string },
+  formattedMessages: string,
+  embeddingConfig: EmbeddingConfig,
+  retrievalConfig: RetrievalConfig,
+): Promise<RelatedInsight[]> {
+  if (!retrievalConfig.enabled) return [];
+
+  try {
+    const db = getDb();
+
+    // Ensure sqlite-vec extension is loaded
+    loadVectorExtension(db);
+
+    // Check if the vector table exists
+    const tableCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_insights'"
+    ).get() as { name: string } | undefined;
+
+    if (!tableCheck) {
+      return [];
+    }
+
+    // Embed the session text (truncate to avoid excessive token usage)
+    const maxEmbedChars = 4000;
+    const textToEmbed = formattedMessages.length > maxEmbedChars
+      ? formattedMessages.slice(0, maxEmbedChars)
+      : formattedMessages;
+
+    const embedding = await embedOne(embeddingConfig, `session-${session.id}`, textToEmbed);
+
+    // Query for similar insights, filtered by project
+    const candidates = querySimilarFiltered(
+      db,
+      'insight',
+      embedding.vector,
+      retrievalConfig.topK,
+      session.project_id,
+    );
+
+    if (candidates.length === 0) return [];
+
+    // Fetch insight details for the candidates
+    const ids = candidates.map(c => c.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT id, type, title, content, confidence FROM insights WHERE id IN (${placeholders})`
+    ).all(...ids) as Array<{
+      id: string;
+      type: string;
+      title: string;
+      content: string;
+      confidence: number;
+    }>;
+
+    // Build a map for ordering by similarity
+    const insightMap = new Map(rows.map(r => [r.id, r]));
+
+    // Convert to RelatedInsight[], ordered by similarity, filtered by threshold
+    const results: RelatedInsight[] = [];
+    for (const candidate of candidates) {
+      const insight = insightMap.get(candidate.id);
+      if (!insight) continue;
+
+      // Convert distance to similarity (cosine similarity ~ 1 - distance for unit vectors)
+      const similarity = 1 - candidate.distance;
+      if (similarity < retrievalConfig.similarityThreshold) continue;
+
+      results.push({
+        type: insight.type,
+        title: insight.title,
+        content: insight.content.slice(0, 300),
+        confidence: insight.confidence,
+      });
+
+      if (results.length >= retrievalConfig.topK) break;
+    }
+
+    return results;
+  } catch {
+    // Retrieval failure is non-fatal — fall back to analysis without related insights
+    return [];
   }
 }
 

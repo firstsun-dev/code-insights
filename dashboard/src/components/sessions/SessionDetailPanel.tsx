@@ -39,11 +39,11 @@ import { AnalyzeDropdown } from '@/components/analysis/AnalyzeDropdown';
 import { AnalyzeButton } from '@/components/analysis/AnalyzeButton';
 import { useAnalysis } from '@/components/analysis/AnalysisContext';
 import { useMissingFacets, useBackfillFacets } from '@/hooks/useFacets';
-import { useQueuedSessionIds } from '@/hooks/useAnalysisQueue';
+import { ExportGenerateRequest, exportGenerateStream } from '@/lib/api';
 import { exportSession } from '@/lib/export-session';
 import { CollapsibleInsightItem } from '@/components/sessions/CollapsibleInsightItem';
 import { PromptQualityAnalyzeButton } from '@/components/sessions/PromptQualityAnalyzeButton';
-import { RenameSessionDialog } from '@/components/sessions/RenameSessionDialog';
+import { EditSessionDialog } from '@/components/sessions/EditSessionDialog';
 import { VitalsStrip } from '@/components/sessions/VitalsStrip';
 import { AnalysisCostLine } from '@/components/sessions/AnalysisCostLine';
 import { ChatConversation } from '@/components/chat/conversation/ChatConversation';
@@ -87,8 +87,6 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
   const pqAnalysisState = getAnalysisState(sessionId, 'prompt_quality');
   const isAnalyzingThisSession =
     sessionAnalysisState?.status === 'analyzing' || pqAnalysisState?.status === 'analyzing';
-  const queuedSessionIds = useQueuedSessionIds();
-  const isQueuedForAnalysis = queuedSessionIds.has(sessionId);
   const { data: missingFacetsData } = useMissingFacets();
   const backfillMutation = useBackfillFacets();
   const missingFacetIds = useMemo(
@@ -99,6 +97,20 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
     () => insights.length > 0 && missingFacetIds.has(sessionId),
     [insights, missingFacetIds, sessionId]
   );
+
+  const rageLoopFriction = useMemo(() => {
+    if (!session?.facets?.friction_points) return null;
+    try {
+      const friction = JSON.parse(session.facets.friction_points) as Array<{
+        category: string;
+        description: string;
+        severity: string;
+      }>;
+      return friction.find(f => f.category === 'rage-loop');
+    } catch {
+      return null;
+    }
+  }, [session?.facets?.friction_points]);
 
   const messages = messagesQuery.data?.pages.flat() ?? [];
   const loadingMessages = messagesQuery.isLoading;
@@ -412,13 +424,24 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
         <TabsContent value="insights" className="flex-1 overflow-y-auto mt-0 p-5 space-y-4">
           <VitalsStrip session={session} />
 
-          {/* Queue in-progress indicator — shown when session is awaiting background analysis */}
-          {isQueuedForAnalysis && !isAnalyzingThisSession && (
-            <div className="flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-4 py-2.5">
-              <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
-              <p className="text-sm text-muted-foreground">
-                Analysis in progress — results will appear shortly
+          {/* Sunk Cost Alert (Rage Loop) */}
+          {rageLoopFriction && (
+            <div className="flex flex-col gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+                <h4 className="text-sm font-bold text-red-600 dark:text-red-400">Sunk Cost Alert: Rage Loop Detected</h4>
+              </div>
+              <p className="text-sm text-red-700/80 dark:text-red-300/80 leading-relaxed">
+                {rageLoopFriction.description}
               </p>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+                  Critical Friction
+                </Badge>
+                <p className="text-[11px] text-muted-foreground">
+                  Recommendation: Use <code className="bg-muted px-1 rounded">/compact</code> or start a fresh session.
+                </p>
+              </div>
             </div>
           )}
 
@@ -614,7 +637,7 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
               loadingMore={loadingMore}
               hasMore={hasMore}
               onLoadMore={() => messagesQuery.fetchNextPage()}
-              sourceTool={session.source_tool}
+              sourceTool={session.source_tool ?? undefined}
               highlightMessageId={searchHighlightId}
               searchQuery={searchQuery}
             />
@@ -622,12 +645,13 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
         </TabsContent>
       </Tabs>
 
-      {/* Rename dialog */}
-      <RenameSessionDialog
+      <EditSessionDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
         sessionId={session.id}
         currentTitle={getSessionTitle(session)}
+        currentProjectName={session.project_name}
+        currentUrl={session.git_remote_url}
       />
     </div>
   );

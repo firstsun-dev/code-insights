@@ -53,9 +53,7 @@ function getStmts() {
       INSERT INTO projects (id, name, path, git_remote_url, project_id_source, last_activity)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
         path = excluded.path,
-        git_remote_url = excluded.git_remote_url,
         last_activity = MAX(last_activity, excluded.last_activity),
         updated_at = datetime('now')
     `);
@@ -91,6 +89,7 @@ function getStmts() {
         message_count, user_message_count, assistant_message_count, tool_call_count,
         compact_count, auto_compact_count, slash_commands,
         git_branch, claude_version, source_tool,
+        parent_session_id, agent_type,
         device_id, device_hostname, device_platform,
         total_input_tokens, total_output_tokens, cache_creation_tokens, cache_read_tokens,
         estimated_cost_usd, models_used, primary_model, usage_source
@@ -101,6 +100,7 @@ function getStmts() {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
+        ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
@@ -118,6 +118,8 @@ function getStmts() {
         compact_count           = excluded.compact_count,
         auto_compact_count      = excluded.auto_compact_count,
         slash_commands          = excluded.slash_commands,
+        parent_session_id       = excluded.parent_session_id,
+        agent_type              = excluded.agent_type,
         total_input_tokens      = excluded.total_input_tokens,
         total_output_tokens     = excluded.total_output_tokens,
         cache_creation_tokens   = excluded.cache_creation_tokens,
@@ -132,10 +134,19 @@ function getStmts() {
 
   if (!_stmtInsertMessage) {
     _stmtInsertMessage = db.prepare(`
-      INSERT OR IGNORE INTO messages (
+      INSERT INTO messages (
         id, session_id, type, content, thinking,
         tool_calls, tool_results, usage, timestamp, parent_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        type = excluded.type,
+        content = excluded.content,
+        thinking = excluded.thinking,
+        tool_calls = excluded.tool_calls,
+        tool_results = excluded.tool_results,
+        usage = excluded.usage,
+        timestamp = excluded.timestamp,
+        parent_id = excluded.parent_id
     `);
   }
 
@@ -287,6 +298,8 @@ function upsertSession(
     session.gitBranch,
     session.claudeVersion,
     session.sourceTool ?? 'claude-code',
+    session.parentSessionId ?? null,
+    session.agentType ?? null,
     deviceInfo.deviceId,
     deviceInfo.hostname,
     deviceInfo.platform,

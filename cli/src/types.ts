@@ -78,6 +78,8 @@ export interface ParsedSession {
   gitBranch: string | null;
   claudeVersion: string | null;
   sourceTool?: string;
+  parentSessionId?: string | null;  // For subagent sessions (e.g., Mistral Vibe nested agents)
+  agentType?: string | null;        // Type of agent for subagent sessions
   usage?: SessionUsage;
   messages: ParsedMessage[];
 }
@@ -328,13 +330,16 @@ export interface WorkingStyleResult {
 
 export type ReflectResult = FrictionWinsResult | RulesSkillsResult | WorkingStyleResult;
 
-export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'llamacpp';
+export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'llamacpp';
 
 export interface LLMProviderConfig {
   provider: LLMProvider;
   apiKey?: string;       // not required for Ollama
   model: string;
   baseUrl?: string;      // for Ollama or custom endpoints
+  rateLimit?: {
+    rpm: number;
+  };
 }
 
 export interface ProviderModelOption {
@@ -361,6 +366,14 @@ export interface ClaudeInsightConfig {
   dashboard?: {
     port?: number;
     llm?: LLMProviderConfig;
+    analysis?: {
+      retrieval?: {
+        enabled?: boolean;
+        topK?: number;
+        similarityThreshold?: number;
+        sameProjectOnly?: boolean;
+      };
+    };
   };
   telemetry?: boolean;              // default true (opt-out)
 }
