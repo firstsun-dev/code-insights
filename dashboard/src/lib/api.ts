@@ -67,12 +67,14 @@ export function setHomeEnabled(id: string, enabled: boolean) {
 export function fetchSessions(params?: {
   projectId?: string;
   sourceTool?: string;
+  homeId?: string;
   limit?: number;
   offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.projectId) q.set('projectId', params.projectId);
   if (params?.sourceTool) q.set('sourceTool', params.sourceTool);
+  if (params?.homeId) q.set('homeId', params.homeId);
   if (params?.limit !== undefined) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
   const qs = q.toString() ? `?${q.toString()}` : '';

@@ -36,6 +36,7 @@ import { InsightTypePills } from '@/components/filters/InsightTypePills';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { HomeSelect } from '@/components/filters/HomeSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
 import { LlmNudgeBanner } from '@/components/LlmNudgeBanner';
 import { DispatchDrawer } from '@/components/dispatch/DispatchDrawer';
@@ -81,6 +82,7 @@ export default function InsightsPage() {
     view: 'timeline',
     pattern: '',
     source: 'all',
+    homeId: 'all',
   });
 
   // Dispatch selection state
@@ -219,6 +221,15 @@ export default function InsightsPage() {
     return map;
   }, [allSessions]);
 
+  // Map session_id → home_id for client-side home filtering on Insights
+  const sessionHomeMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const s of allSessions) {
+      map.set(s.id, s.home_id);
+    }
+    return map;
+  }, [allSessions]);
+
   const patternGroups = useMemo(() => buildPatternGroups(insights), [insights]);
 
   const patternInsightIds = useMemo(() => {
@@ -241,11 +252,15 @@ export default function InsightsPage() {
         const sourceTool = sessionSourceMap.get(i.session_id);
         if (sourceTool !== filters.source) return false;
       }
+      if (filters.homeId !== 'all') {
+        const sessionHomeId = sessionHomeMap.get(i.session_id);
+        if (sessionHomeId !== filters.homeId) return false;
+      }
       return true;
     });
-  }, [insights, activeTypes, filters.q, filters.source, patternInsightIds, sessionSourceMap]);
+  }, [insights, activeTypes, filters.q, filters.source, filters.homeId, patternInsightIds, sessionSourceMap, sessionHomeMap]);
 
-  const hasFilters = !!filters.q || filters.type !== 'all' || filters.project !== 'all' || !!filters.pattern || filters.source !== 'all';
+  const hasFilters = !!filters.q || filters.type !== 'all' || filters.project !== 'all' || !!filters.pattern || filters.source !== 'all' || filters.homeId !== 'all';
 
   const grouped = useMemo((): InsightGroup[] => {
     const view = filters.view;
@@ -393,6 +408,12 @@ export default function InsightsPage() {
             className="w-[140px]"
           />
 
+          <HomeSelect
+            value={filters.homeId}
+            onValueChange={(v) => setFilter('homeId', v)}
+            className="w-[140px]"
+          />
+
           <Tabs
             value={filters.view}
             onValueChange={(v) => setFilter('view', v)}
@@ -412,8 +433,8 @@ export default function InsightsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <InsightTypePills activeTypes={activeTypes} onChange={handleTypePillChange} />
           <SaveFilterPopover
-            activeFilters={{ q: filters.q, project: filters.project, type: filters.type, source: filters.source }}
-            defaultFilterValues={{ q: '', project: 'all', type: 'all', source: 'all' }}
+            activeFilters={{ q: filters.q, project: filters.project, type: filters.type, source: filters.source, homeId: filters.homeId }}
+            defaultFilterValues={{ q: '', project: 'all', type: 'all', source: 'all', homeId: 'all' }}
             onSave={saveFilter}
           />
         </div>

@@ -11,6 +11,7 @@ import { formatTokenCount, formatModelName } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CHART_COLORS } from '@/lib/constants/colors';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { HomeSelect } from '@/components/filters/HomeSelect';
 import {
   BarChart,
   Bar,
@@ -34,9 +35,11 @@ const rangeOptions: { value: AnalyticsRange; label: string }[] = [
 export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>('7d');
   const [source, setSource] = useState<string>('all');
+  const [homeId, setHomeId] = useState<string>('all');
   const { data: sessions = [], isLoading: sessionsLoading, isError: sessionsError, refetch: refetchSessions } = useSessions({
     limit: 500,
     ...(source !== 'all' && { sourceTool: source }),
+    ...(homeId !== 'all' && { homeId }),
   });
   const { data: insights = [], isLoading: insightsLoading, isError: insightsError, refetch: refetchInsights } = useInsights();
   const { data: projects = [], isLoading: projectsLoading, isError: projectsError, refetch: refetchProjects } = useProjects();
@@ -241,6 +244,11 @@ export default function AnalyticsPage() {
           <SourceToolSelect
             value={source}
             onValueChange={setSource}
+            className="w-[140px] h-7 text-xs"
+          />
+          <HomeSelect
+            value={homeId}
+            onValueChange={setHomeId}
             className="w-[140px] h-7 text-xs"
           />
         </div>
