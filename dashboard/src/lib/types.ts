@@ -20,6 +20,17 @@ export interface Project {
   estimated_cost_usd?: number;
 }
 
+// Home directories (multi-home-directory support). Deliberately camelCase — the
+// server route returns the CLI's Home shape as-is (already camelCase from
+// cli/src/db/homes.ts's rowToHome()) rather than raw snake_case SQLite columns.
+export interface Home {
+  id: string;
+  label: string;
+  path: string;
+  enabled: boolean;
+  createdAt: string; // ISO 8601
+}
+
 export type SessionCharacter =
   | 'deep_focus'
   | 'bug_hunt'
