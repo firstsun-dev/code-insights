@@ -18,8 +18,8 @@ export class CodexProvider implements SessionProvider {
     return 'codex-cli';
   }
 
-  async discover(options?: { projectFilter?: string }): Promise<string[]> {
-    const codexHome = getCodexHome();
+  async discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]> {
+    const codexHome = getCodexHome(options?.homeRoot);
     if (!codexHome) return [];
 
     const files: string[] = [];
@@ -48,11 +48,11 @@ export class CodexProvider implements SessionProvider {
 // Discovery helpers
 // ---------------------------------------------------------------------------
 
-function getCodexHome(): string | null {
+function getCodexHome(homeRoot?: string): string | null {
   const envHome = process.env.CODEX_HOME;
   if (envHome && fs.existsSync(envHome)) return envHome;
 
-  const home = os.homedir();
+  const home = homeRoot ?? os.homedir();
   const defaultDir = path.join(home, '.codex');
   return fs.existsSync(defaultDir) ? defaultDir : null;
 }

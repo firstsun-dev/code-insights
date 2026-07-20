@@ -87,10 +87,12 @@ export function saveSyncState(state: SyncState): void {
 }
 
 /**
- * Get default Claude directory
+ * Get default Claude directory.
+ * homeRoot lets callers point at an alternate home directory (multi-home support);
+ * defaults to the current machine's home directory when omitted.
  */
-export function getClaudeDir(): string {
-  return path.join(os.homedir(), '.claude', 'projects');
+export function getClaudeDir(homeRoot?: string): string {
+  return path.join(homeRoot ?? os.homedir(), '.claude', 'projects');
 }
 
 /**
