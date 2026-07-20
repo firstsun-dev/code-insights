@@ -23,8 +23,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
-export function fetchProjects() {
-  return request<{ projects: Project[] }>('/projects');
+export function fetchProjects(params?: { limit?: number; offset?: number }) {
+  const query = new URLSearchParams();
+  if (params?.limit !== undefined) query.set('limit', String(params.limit));
+  if (params?.offset !== undefined) query.set('offset', String(params.offset));
+  const qs = query.toString();
+  return request<{ projects: Project[] }>(`/projects${qs ? `?${qs}` : ''}`);
 }
 
 export function fetchProject(id: string) {
