@@ -284,6 +284,44 @@ export interface DispatchPrefill {
   contextMarkdown: string;
 }
 
+// ── Dispatch (LLM-powered post generation) ────────────────────────────────────
+
+export type DispatchTone = 'technical' | 'accessible' | 'quick-tips';
+export type DispatchFormat = 'blog' | 'linkedin';
+
+export interface DispatchRequest {
+  insightIds: string[];
+  context: string;
+  tone: DispatchTone;
+  format: DispatchFormat;
+  includeSessionBackground?: boolean;
+}
+
+export interface DispatchResponse {
+  markdown: string;
+  body: string;
+  format: DispatchFormat;
+  frontmatter: { title: string; tags: string[]; tldr: string };
+  wordCount: number;
+  characterCount: number;
+  degraded: boolean;
+  model: string;
+  tokensUsed: { input: number; output: number };
+}
+
+export interface DispatchImagePromptRequest {
+  title: string;
+  tags: string[];
+  tldr: string;
+  format: DispatchFormat;
+}
+
+export interface DispatchImagePromptResponse {
+  prompt: string;
+  model: string;
+  tokensUsed: { input: number; output: number };
+}
+
 // LLM config from /api/config/llm
 export interface LLMConfig {
   dashboardPort: number;
