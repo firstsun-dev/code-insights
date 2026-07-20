@@ -180,3 +180,72 @@ Respond with this JSON format:
 
 Respond with valid JSON only, wrapped in <json>...</json> tags.`;
 }
+
+// --- Personality Archetype (prose only — never trust numeric output from this prompt) ---
+//
+// This prompt is deliberately fed ONLY the 6 already-computed scores (4 unipolar traits
+// + the explorer/executor axis + pace), never the raw facet/insight data those scores
+// were derived from. The LLM's job is purely descriptive narration of numbers it did not
+// produce and cannot recompute — every numeric field on PersonalityProfile always comes
+// from cli/src/analysis/personality.ts's deterministic scoring, never from this call.
+// The response schema below is intentionally flat (string / string[] only, no nested
+// objects, no numbers) so it survives extractJsonPayload's balanced-brace fallback
+// degradation gracefully — see cli/src/analysis/response-parsers.ts.
+
+export const PERSONALITY_SYSTEM_PROMPT = `You are writing a short personality archetype narrative based on 6 pre-computed scores from a developer's AI coding sessions: four unipolar traits (Precision, Resilience, Autonomy, Craft, each 0-100 or null), one bipolar axis (Explorer <-> Executor, -100 to +100 or null), and a Pace score (0-100 or null, deliberate to rapid).
+
+RULES:
+- Describe based ONLY on the 6 given scores. Never restate raw numbers in prose (no "your Precision is 72" — describe qualitatively instead).
+- Never invent or infer new numeric values.
+- Use band language for the 4 unipolar traits: 65-100 = high, 35-64 = moderate, 0-34 = low.
+- Use band language for the axis: +34 to +100 = Executor-leaning, -33 to +33 = Balanced, -100 to -34 = Explorer-leaning.
+- If a trait's score is null, omit it entirely from your narrative — never say "data unavailable" or similar. Null means there wasn't enough data yet, not that the trait is absent; don't editorialize about the gap.
+- Write the narrative in second person ("You tend to...").
+- Generate a tagline: an empowering, specific 2-4 word archetype label in title case, maximum 40 characters (e.g. "The Deliberate Craftsperson", "Resilient Explorer", "Precision-Driven Executor"). Never critical or negative.
+- Generate a tagline_subtitle: a single short sentence (<=80 chars) that elaborates on the tagline with a specific behavioral observation.
+- Write narrative as exactly 2-3 sentences, second person, grounded only in the given scores.
+- List 2-3 strengths as short phrases (<=8 words each), grounded in whichever traits scored high.
+- List 0-2 growthAreas as short phrases (<=8 words each), grounded in whichever traits scored low or moderate. Return an empty array if nothing qualifies — never invent one to fill the list.
+
+Respond with valid JSON only, wrapped in <json>...</json> tags.`;
+
+export function generatePersonalityPrompt(data: {
+  precision: number | null;
+  resilience: number | null;
+  autonomy: number | null;
+  craft: number | null;
+  explorerExecutorAxis: number | null;
+  pace: number | null;
+  dominantWorkflow?: string;
+  dominantCharacter?: string;
+}): string {
+  const scores = {
+    precision: data.precision,
+    resilience: data.resilience,
+    autonomy: data.autonomy,
+    craft: data.craft,
+    explorerExecutorAxis: data.explorerExecutorAxis,
+    pace: data.pace,
+  };
+
+  const contextLines: string[] = [];
+  if (data.dominantWorkflow) contextLines.push(`Dominant workflow pattern: ${data.dominantWorkflow}`);
+  if (data.dominantCharacter) contextLines.push(`Dominant session type: ${data.dominantCharacter}`);
+  const contextSection = contextLines.length > 0 ? `\n\nCONTEXT (optional, supplementary):\n${contextLines.join('\n')}` : '';
+
+  return `Write a personality archetype narrative based on these pre-computed scores.
+
+SCORES (0-100 for unipolar traits and pace, -100 to +100 for the axis; null = insufficient data):
+${JSON.stringify(scores, null, 2)}${contextSection}
+
+Respond with this JSON format:
+{
+  "tagline": "2-4 word archetype label (e.g. The Deliberate Craftsperson)",
+  "tagline_subtitle": "single sentence <=80 chars elaborating on the tagline",
+  "narrative": "2-3 sentence second-person personality description",
+  "strengths": ["short phrase", "short phrase"],
+  "growthAreas": []
+}
+
+Respond with valid JSON only, wrapped in <json>...</json> tags.`;
+}

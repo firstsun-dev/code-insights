@@ -21,6 +21,7 @@ import facetsRouter from './routes/facets.js';
 import reflectRouter from './routes/reflect.js';
 import dispatchRouter from './routes/dispatch.js';
 import homesRouter from './routes/homes.js';
+import personalityRouter from './routes/personality.js';
 
 export interface ServerOptions {
   port: number;
@@ -63,6 +64,7 @@ export function createApp(): OpenAPIHono {
   app.route('/api/reflect', reflectRouter);
   app.route('/api/dispatch', dispatchRouter);
   app.route('/api/homes', homesRouter);
+  app.route('/api/personality', personalityRouter);
 
   // Health check — first route migrated to app.openapi() as the worked example
   // for the rest of the routers.
