@@ -223,7 +223,11 @@ app.post('/generate', requireLLM(), async (c) => {
   const projectId = resolveProjectId(body.project);
 
   const db = getDb();
-  const { where, params } = buildWhereClause(period, body.project, body.source);
+  // Same normalization as GET / (see resolveProjectId): '__all__' is only the snapshot
+  // table's sentinel PK value, never a literal sessions.project_id — must be treated as
+  // "no project filter" here too. Without this, project: '__all__' would filter
+  // s.project_id = '__all__' (matching zero rows) and persist an empty profile.
+  const { where, params } = buildWhereClause(period, body.project === '__all__' ? undefined : body.project, body.source);
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
