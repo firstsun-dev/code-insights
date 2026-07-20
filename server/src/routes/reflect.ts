@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '@code-insights/cli/db/client';
 import { jsonrepair } from 'jsonrepair';
@@ -14,9 +14,29 @@ import {
   generateWorkingStylePrompt,
 } from '../llm/reflect-prompts.js';
 import { buildWhereClause, buildPeriodFilter, parseIsoWeek, formatIsoWeek, getAggregatedData } from './shared-aggregation.js';
+import { AggregatedDataSchema } from '../schemas/aggregation.js';
+import {
+  ReflectQuerySchema,
+  WeeksQuerySchema,
+  SnapshotQuerySchema,
+  WeeksResponseSchema,
+  SnapshotResponseSchema,
+} from '../schemas/reflect.js';
 import type { ReflectSection } from '@code-insights/cli/types';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// POST /generate is an SSE endpoint (streamSSE) — it returns a raw streamed
+// Response that doesn't fit a single JSON response schema, so it stays as a
+// plain app.post() route on this OpenAPIHono instance rather than
+// app.openapi(), same as the SSE endpoints in analysis.ts and facets.ts. Its
+// body is also not wired into a zod schema for the same reason as elsewhere:
+// no field-level validation errors are returned here (defaults silently fill
+// in), so this is purely a documentation gap, not a behavior-preserving one.
 
 const MIN_FACETS_FOR_REFLECT = 8;
 
@@ -50,7 +70,6 @@ function detectTargetTool(db: ReturnType<typeof getDb>): string {
 // SSE endpoint: aggregates facets in code, then calls synthesis prompts for each section.
 // Streams progress events so the UI can show phase-by-phase progress.
 app.post('/generate', requireLLM(), async (c) => {
-
   const body = await c.req.json<{
     sections?: ReflectSection[];
     period?: string;
@@ -244,7 +263,19 @@ app.post('/generate', requireLLM(), async (c) => {
 // GET /api/reflect/results
 // Returns raw aggregated facet data without LLM synthesis (fast, no cost).
 // The full synthesized view requires POST /api/reflect/generate.
-app.get('/results', (c) => {
+const resultsRoute = createRoute({
+  method: 'get',
+  path: '/results',
+  request: { query: ReflectQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AggregatedDataSchema } },
+      description: 'Raw aggregated facet data (no LLM synthesis)',
+    },
+  },
+});
+
+app.openapi(resultsRoute, (c) => {
   const db = getDb();
   const period = c.req.query('period') || '30d';
   const project = c.req.query('project');
@@ -254,14 +285,26 @@ app.get('/results', (c) => {
   const { where, params } = buildWhereClause(period, project, source, homeId);
   const aggregated = getAggregatedData(db, where, params, project, source, homeId);
 
-  return c.json(aggregated);
+  return c.json(aggregated, 200);
 });
 
 // GET /api/reflect/weeks
 // Returns all ISO weeks from the earliest session through the current week, with snapshot status.
 // Used by the WeekSelector component to show which weeks have reflections.
 // Week list is data-driven (not capped at 8) so users with long history can navigate all weeks.
-app.get('/weeks', (c) => {
+const weeksRoute = createRoute({
+  method: 'get',
+  path: '/weeks',
+  request: { query: WeeksQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: WeeksResponseSchema } },
+      description: 'ISO weeks from the earliest session through the current week',
+    },
+  },
+});
+
+app.openapi(weeksRoute, (c) => {
   const db = getDb();
   const project = c.req.query('project');
 
@@ -278,7 +321,7 @@ app.get('/weeks', (c) => {
   `).get(...projectParams) as { earliest: string | null } | undefined;
 
   if (!earliestRow?.earliest) {
-    return c.json({ weeks: [] });
+    return c.json({ weeks: [] }, 200);
   }
 
   // Compute the UTC midnight of the Monday of the current ISO week.
@@ -363,12 +406,24 @@ app.get('/weeks', (c) => {
     generatedAt: snapshotMap.get(entry.week) ?? null,
   }));
 
-  return c.json({ weeks });
+  return c.json({ weeks }, 200);
 });
 
 // GET /api/reflect/snapshot
 // Returns cached reflect results for a given period/project combo.
-app.get('/snapshot', (c) => {
+const snapshotRoute = createRoute({
+  method: 'get',
+  path: '/snapshot',
+  request: { query: SnapshotQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: SnapshotResponseSchema } },
+      description: 'Cached reflect results for a period/project combo, or null',
+    },
+  },
+});
+
+app.openapi(snapshotRoute, (c) => {
   const db = getDb();
   const period = c.req.query('period') || '30d';
   const project = c.req.query('project') || '__all__';
@@ -387,15 +442,15 @@ app.get('/snapshot', (c) => {
   } | undefined;
 
   if (!row) {
-    return c.json({ snapshot: null });
+    return c.json({ snapshot: null }, 200);
   }
 
-  let results: unknown;
+  let results: Record<string, unknown>;
   try {
     results = JSON.parse(row.results_json);
   } catch {
     // Corrupted snapshot data — treat as if no snapshot exists
-    return c.json({ snapshot: null });
+    return c.json({ snapshot: null }, 200);
   }
 
   return c.json({
@@ -409,7 +464,7 @@ app.get('/snapshot', (c) => {
       sessionCount: row.session_count,
       facetCount: row.facet_count,
     },
-  });
+  }, 200);
 });
 
 export default app;
