@@ -95,6 +95,97 @@ export interface Session {
 export type InsightType = 'summary' | 'decision' | 'learning' | 'technique' | 'prompt_quality';
 export type InsightScope = 'session' | 'project' | 'overall';
 
+// Personality Analysis Types
+export interface PersonalityBigFiveTrait {
+  score: number;
+  level: 'low' | 'moderate' | 'high';
+  evidence: string[];
+}
+
+export interface PersonalityBigFive {
+  openness: PersonalityBigFiveTrait;
+  conscientiousness: PersonalityBigFiveTrait;
+  extraversion: PersonalityBigFiveTrait;
+  agreeableness: PersonalityBigFiveTrait;
+  neuroticism: PersonalityBigFiveTrait;
+}
+
+export interface PersonalityWorkStyle {
+  planning_approach: 'structured' | 'balanced' | 'emergent';
+  planning_description: string;
+  problem_solving: 'analytical' | 'intuitive' | 'hybrid';
+  problem_solving_description: string;
+  risk_tolerance: 'conservative' | 'balanced' | 'experimental';
+  risk_tolerance_description: string;
+  pace_preference: 'deliberate' | 'balanced' | 'rapid';
+  pace_description: string;
+}
+
+export interface PersonalityCommunicationPatterns {
+  prompt_style: 'detailed' | 'balanced' | 'concise';
+  prompt_style_description: string;
+  information_gathering: 'comprehensive' | 'just_in_time' | 'balanced';
+  information_gathering_description: string;
+  feedback_processing: 'immediate' | 'reflective' | 'balanced';
+  feedback_processing_description: string;
+}
+
+export interface PersonalityDecisionMaking {
+  style: 'data_driven' | 'intuitive' | 'balanced';
+  style_description: string;
+  option_exploration: 'single_path' | 'multiple_alternatives' | 'balanced';
+  option_exploration_description: string;
+  reversibility_preference: 'commit_quickly' | 'keep_open' | 'balanced';
+  reversibility_description: string;
+}
+
+export interface PersonalityStrength {
+  strength: string;
+  description: string;
+  evidence: string;
+}
+
+export interface PersonalityGrowthArea {
+  area: string;
+  description: string;
+  suggestion: string;
+}
+
+export interface PersonalityAICollaboration {
+  preferred_role: 'co_pilot' | 'pair_programmer' | 'consultant' | 'tool' | 'mentor';
+  preferred_role_description: string;
+  delegation_comfort: 'hands_on' | 'balanced' | 'hands_off';
+  trust_level: 'verify_heavily' | 'balanced' | 'trust_default';
+  best_collaboration_mode: string;
+}
+
+export interface PersonalityProfile {
+  section: 'personality-profile';
+  big_five: PersonalityBigFive;
+  work_style: PersonalityWorkStyle;
+  communication_patterns: PersonalityCommunicationPatterns;
+  decision_making: PersonalityDecisionMaking;
+  strengths: PersonalityStrength[];
+  growth_areas: PersonalityGrowthArea[];
+  ai_collaboration: PersonalityAICollaboration;
+  narrative_summary: string;
+  characterDistribution?: Record<string, number>;
+  workflowDistribution?: Record<string, number>;
+  outcomeDistribution?: Record<string, number>;
+  generatedAt: string;
+}
+
+export interface PersonalitySnapshot {
+  period: string;
+  projectId: string;
+  profile: PersonalityProfile;
+  generatedAt: string;
+  windowStart: string | null;
+  windowEnd: string;
+  sessionCount: number;
+  facetCount: number;
+}
+
 export interface Insight {
   id: string;
   session_id: string;
@@ -341,4 +432,28 @@ export interface LLMConfig {
   model?: string;
   apiKey?: string;      // masked by server before returning (first4...last4)
   baseUrl?: string;
+}
+
+// Personality API types
+export interface PersonalityWeekInfo {
+  week: string;
+  sessionCount: number;
+  hasSnapshot: boolean;
+  generatedAt: string | null;
+}
+
+export interface PersonalitySnapshotResponse {
+  snapshot: PersonalitySnapshot | null;
+}
+
+export interface PersonalityWeeksResponse {
+  weeks: PersonalityWeekInfo[];
+}
+
+export interface CacheBySourceRow {
+  sourceTool: string | null;
+  sessionCount: number;
+  totalInputTokens: number | null;
+  cacheCreationTokens: number | null;
+  cacheReadTokens: number | null;
 }
