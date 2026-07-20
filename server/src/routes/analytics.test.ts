@@ -166,4 +166,196 @@ describe('Analytics routes', () => {
       expect(body.stats.estimated_cost_usd).toBe(1.5);
     });
   });
+
+  describe('GET /api/analytics/cache-by-source', () => {
+    function insertSessionWithCache(
+      db: Database.Database,
+      opts: {
+        id: string;
+        startedAt: string;
+        homeId?: string;
+        sourceTool: string;
+        cacheCreationTokens?: number;
+        cacheReadTokens?: number;
+        totalInputTokens?: number;
+      }
+    ): void {
+      db.prepare(`
+        INSERT INTO projects (id, name, path, last_activity)
+        VALUES (?, 'test', '/test', datetime('now'))
+        ON CONFLICT (id) DO NOTHING
+      `).run('p-' + opts.id);
+      db.prepare(`
+        INSERT INTO sessions (
+          id, project_id, project_name, project_path, started_at, ended_at,
+          home_id, source_tool, cache_creation_tokens, cache_read_tokens, total_input_tokens
+        ) VALUES (?, ?, 'test', '/test', ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        opts.id,
+        'p-' + opts.id,
+        opts.startedAt,
+        opts.startedAt,
+        opts.homeId ?? 'default',
+        opts.sourceTool,
+        opts.cacheCreationTokens ?? 0,
+        opts.cacheReadTokens ?? 0,
+        opts.totalInputTokens ?? 0
+      );
+    }
+
+    it('returns empty rows when no sessions exist', async () => {
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rows).toEqual([]);
+    });
+
+    it('groups cache tokens by source_tool', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's1',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheCreationTokens: 1000,
+        cacheReadTokens: 5000,
+        totalInputTokens: 10000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's2',
+        startedAt: '2026-07-19T11:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheCreationTokens: 500,
+        cacheReadTokens: 2000,
+        totalInputTokens: 5000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's3',
+        startedAt: '2026-07-19T12:00:00.000Z',
+        sourceTool: 'cursor',
+        cacheCreationTokens: 2000,
+        cacheReadTokens: 8000,
+        totalInputTokens: 15000,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=all');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.rows.length).toBe(2);
+      const kilo = body.rows.find((r: any) => r.sourceTool === 'kilo');
+      const cursor = body.rows.find((r: any) => r.sourceTool === 'cursor');
+
+      expect(kilo).toBeDefined();
+      expect(kilo.sessionCount).toBe(2);
+      expect(kilo.cacheCreationTokens).toBe(1500);
+      expect(kilo.cacheReadTokens).toBe(7000);
+      expect(kilo.totalInputTokens).toBe(15000);
+
+      expect(cursor).toBeDefined();
+      expect(cursor.sessionCount).toBe(1);
+      expect(cursor.cacheCreationTokens).toBe(2000);
+      expect(cursor.cacheReadTokens).toBe(8000);
+    });
+
+    it('orders by cache_read_tokens DESC', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's1',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheReadTokens: 1000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's2',
+        startedAt: '2026-07-19T11:00:00.000Z',
+        sourceTool: 'cursor',
+        cacheReadTokens: 5000,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=all');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.rows[0].sourceTool).toBe('cursor');
+      expect(body.rows[1].sourceTool).toBe('kilo');
+    });
+
+    it('filters by range', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's-old',
+        startedAt: '2026-01-01T10:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheReadTokens: 10000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's-new',
+        startedAt: new Date().toISOString(),
+        sourceTool: 'kilo',
+        cacheReadTokens: 500,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=7d');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      const kilo = body.rows.find((r: any) => r.sourceTool === 'kilo');
+      expect(kilo.cacheReadTokens).toBe(500);
+    });
+
+    it('filters by homeId', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's-home-a',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        homeId: 'home-a',
+        sourceTool: 'kilo',
+        cacheReadTokens: 1000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's-home-b',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        homeId: 'home-b',
+        sourceTool: 'kilo',
+        cacheReadTokens: 5000,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=all&homeId=home-a');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      const kilo = body.rows.find((r: any) => r.sourceTool === 'kilo');
+      expect(kilo.cacheReadTokens).toBe(1000);
+    });
+
+    it('filters by source', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's-kilo',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheReadTokens: 1000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's-cursor',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        sourceTool: 'cursor',
+        cacheReadTokens: 5000,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=all&source=kilo');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.rows.length).toBe(1);
+      expect(body.rows[0].sourceTool).toBe('kilo');
+    });
+
+    it('returns 400 for invalid range', async () => {
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=invalid');
+      expect(res.status).toBe(400);
+    });
+  });
 });

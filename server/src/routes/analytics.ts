@@ -140,4 +140,64 @@ app.get('/usage', (c) => {
   return c.json({ stats: stats ?? null });
 });
 
+// Cache tokens aggregated by source_tool
+app.get('/cache-by-source', (c) => {
+  const db = getDb();
+  const { range = '7d', homeId, source } = c.req.query();
+
+  if (!VALID_RANGES.includes(range as Range)) {
+    return c.json({ error: `Invalid range. Must be one of: ${VALID_RANGES.join(', ')}` }, 400);
+  }
+
+  const periodStart = periodStartFor(range);
+
+  const conditions: string[] = ['deleted_at IS NULL'];
+  const params: string[] = [];
+  if (periodStart) {
+    conditions.push('started_at >= ?');
+    params.push(periodStart);
+  }
+  if (homeId) {
+    conditions.push('home_id = ?');
+    params.push(homeId);
+  }
+  if (source) {
+    conditions.push('source_tool = ?');
+    params.push(source);
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const rows = db.prepare(`
+    SELECT
+      source_tool,
+      COUNT(*) AS session_count,
+      SUM(total_input_tokens) AS total_input_tokens,
+      SUM(cache_creation_tokens) AS cache_creation_tokens,
+      SUM(cache_read_tokens) AS cache_read_tokens
+    FROM sessions
+    ${where}
+    GROUP BY source_tool
+    ORDER BY cache_read_tokens DESC
+  `).all(...params) as {
+    source_tool: string | null;
+    session_count: number;
+    total_input_tokens: number | null;
+    cache_creation_tokens: number | null;
+    cache_read_tokens: number | null;
+  }[];
+
+  return c.json({
+    range,
+    homeId,
+    source,
+    rows: rows.map((r) => ({
+      sourceTool: r.source_tool,
+      sessionCount: r.session_count,
+      totalInputTokens: r.total_input_tokens,
+      cacheCreationTokens: r.cache_creation_tokens,
+      cacheReadTokens: r.cache_read_tokens,
+    })),
+  });
+});
+
 export default app;
