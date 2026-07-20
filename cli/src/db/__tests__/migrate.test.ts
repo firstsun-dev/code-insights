@@ -33,7 +33,7 @@ describe('runMigrations — idempotency', () => {
       .all() as Array<{ version: number }>;
 
     // One row per version, no duplicates
-    expect(rows.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(rows.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     db.close();
   });
 });
@@ -103,6 +103,94 @@ describe('runMigrations — V7 analysis_usage table', () => {
 
     expect(row.n).toBe(1);
     expect(row.input_tokens).toBe(200);
+    db.close();
+  });
+});
+
+describe('runMigrations — V9 analysis_queue table', () => {
+  it('creates analysis_queue table with correct columns and defaults', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    const createProject = `INSERT INTO projects (id, name, path, last_activity) VALUES ('p0', 'test', '/test', datetime('now'))`;
+    const createSession = `INSERT INTO sessions (id, project_id, project_name, project_path, started_at, ended_at) VALUES ('s0', 'p0', 'test', '/test', datetime('now'), datetime('now'))`;
+    db.prepare(createProject).run();
+    db.prepare(createSession).run();
+    db.prepare(`INSERT INTO analysis_queue (session_id) VALUES (?)`).run('s0');
+
+    const row = db.prepare(`SELECT * FROM analysis_queue WHERE session_id = ?`).get('s0') as {
+      session_id: string; status: string; runner_type: string; enqueued_at: string;
+      started_at: unknown; completed_at: unknown; error_message: unknown;
+      attempt_count: number; max_attempts: number;
+    };
+
+    expect(row.session_id).toBe('s0');
+    expect(row.status).toBe('pending');
+    expect(row.runner_type).toBe('native');
+    expect(typeof row.enqueued_at).toBe('string');
+    expect(row.started_at).toBeNull();
+    expect(row.attempt_count).toBe(0);
+    expect(row.max_attempts).toBe(3);
+    db.close();
+  });
+
+  it('enforces session_id PRIMARY KEY (no duplicate rows per session)', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    const createProject = `INSERT INTO projects (id, name, path, last_activity) VALUES ('p0b', 'test', '/test', datetime('now'))`;
+    const createSession = `INSERT INTO sessions (id, project_id, project_name, project_path, started_at, ended_at) VALUES ('s0b', 'p0b', 'test', '/test', datetime('now'), datetime('now'))`;
+    db.prepare(createProject).run();
+    db.prepare(createSession).run();
+    db.prepare(`INSERT INTO analysis_queue (session_id) VALUES (?)`).run('s0b');
+
+    expect(() => {
+      db.prepare(`INSERT INTO analysis_queue (session_id) VALUES (?)`).run('s0b');
+    }).toThrow();
+
+    db.close();
+  });
+});
+
+describe('runMigrations — V12 multi-home support', () => {
+  it('seeds a default home row pointing at this machine\'s home directory', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    const row = db.prepare(`SELECT * FROM homes WHERE id = 'default'`).get() as {
+      id: string; label: string; path: string; enabled: number; created_at: string;
+    };
+
+    expect(row).toBeDefined();
+    expect(row.label).toBe('This machine');
+    expect(typeof row.path).toBe('string');
+    expect(row.path.length).toBeGreaterThan(0);
+    expect(row.enabled).toBe(1);
+    db.close();
+  });
+
+  it('backfills existing sessions.home_id to \'default\' and enforces NOT NULL on new inserts', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    db.exec(`
+      INSERT INTO projects (id, name, path, last_activity) VALUES ('p10', 'test', '/test', datetime('now'));
+      INSERT INTO sessions (id, project_id, project_name, project_path, started_at, ended_at)
+        VALUES ('s10', 'p10', 'test', '/test', datetime('now'), datetime('now'));
+    `);
+
+    const row = db.prepare(`SELECT home_id FROM sessions WHERE id = 's10'`).get() as { home_id: string };
+    expect(row.home_id).toBe('default');
+    db.close();
+  });
+
+  it('double-apply does not duplicate the default home row', () => {
+    const db = freshDb();
+    runMigrations(db);
+    runMigrations(db);
+
+    const rows = db.prepare(`SELECT id FROM homes`).all() as Array<{ id: string }>;
+    expect(rows).toHaveLength(1);
     db.close();
   });
 });

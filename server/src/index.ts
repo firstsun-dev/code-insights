@@ -19,6 +19,7 @@ import telemetryRouter from './routes/telemetry.js';
 import facetsRouter from './routes/facets.js';
 import reflectRouter from './routes/reflect.js';
 import dispatchRouter from './routes/dispatch.js';
+import homesRouter from './routes/homes.js';
 
 export interface ServerOptions {
   port: number;
@@ -60,6 +61,7 @@ export function createApp(): Hono {
   app.route('/api/facets', facetsRouter);
   app.route('/api/reflect', reflectRouter);
   app.route('/api/dispatch', dispatchRouter);
+  app.route('/api/homes', homesRouter);
 
   // Health check
   app.get('/api/health', (c) => c.json({ ok: true, version: '0.1.0' }));
