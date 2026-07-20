@@ -62,6 +62,7 @@ export interface Session {
   git_branch: string | null;
   claude_version: string | null;
   source_tool: string | null;
+  home_id: string | null;
   device_id: string | null;
   device_hostname: string | null;
   device_platform: string | null;
