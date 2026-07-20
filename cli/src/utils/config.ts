@@ -126,6 +126,17 @@ export function getOpenCodeDir(): string {
 }
 
 /**
+ * Get Kilo storage directory
+ */
+export function getKiloDir(): string {
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    return path.join(home, '.local', 'share', 'kilo'); // Default fallback for Windows if not in AppData
+  }
+  return path.join(home, '.local', 'share', 'kilo');
+}
+
+/**
  * Get Mistral Vibe home directory
  */
 export function getVibeHomeDir(): string {

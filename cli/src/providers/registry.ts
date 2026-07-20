@@ -6,6 +6,7 @@ import { CopilotCliProvider } from './copilot-cli.js';
 import { CopilotProvider } from './copilot.js';
 import { HermesAgentProvider } from './hermes-agent.js';
 import { OpenCodeProvider } from './opencode.js';
+import { KiloProvider } from './kilo.js';
 import { CrushProvider } from './crush.js';
 import { AntigravityProvider } from './antigravity.js';
 import { MistralVibeProvider } from './mistral-vibe.js';
@@ -33,6 +34,9 @@ providers.set(hermesAgent.getProviderName(), hermesAgent);
 
 const opencode = new OpenCodeProvider();
 providers.set(opencode.getProviderName(), opencode);
+
+const kilo = new KiloProvider();
+providers.set(kilo.getProviderName(), kilo);
 
 const crush = new CrushProvider();
 providers.set(crush.getProviderName(), crush);
