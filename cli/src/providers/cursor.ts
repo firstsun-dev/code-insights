@@ -25,8 +25,8 @@ export class CursorProvider implements SessionProvider {
    * Discover Cursor composer sessions.
    * Returns virtual paths: `<dbPath>#<composerId>` — one per session.
    */
-  async discover(options?: { projectFilter?: string }): Promise<string[]> {
-    const cursorDataDir = getCursorDataDir();
+  async discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]> {
+    const cursorDataDir = getCursorDataDir(options?.homeRoot);
     if (!cursorDataDir) {
       return [];
     }
@@ -98,9 +98,9 @@ export class CursorProvider implements SessionProvider {
 /**
  * Find Cursor's data directory based on the current platform.
  */
-function getCursorDataDir(): string | null {
+function getCursorDataDir(homeRoot?: string): string | null {
   const platform = process.platform;
-  const home = os.homedir();
+  const home = homeRoot ?? os.homedir();
 
   let dataDir: string;
   if (platform === 'darwin') {

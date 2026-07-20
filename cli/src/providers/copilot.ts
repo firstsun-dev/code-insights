@@ -18,8 +18,8 @@ export class CopilotProvider implements SessionProvider {
     return 'copilot';
   }
 
-  async discover(options?: { projectFilter?: string }): Promise<string[]> {
-    const vscodeUserDir = getVSCodeUserDir();
+  async discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]> {
+    const vscodeUserDir = getVSCodeUserDir(options?.homeRoot);
     if (!vscodeUserDir) return [];
 
     const files: string[] = [];
@@ -73,9 +73,9 @@ export class CopilotProvider implements SessionProvider {
 // Discovery helpers
 // ---------------------------------------------------------------------------
 
-function getVSCodeUserDir(): string | null {
+function getVSCodeUserDir(homeRoot?: string): string | null {
   const platform = process.platform;
-  const home = os.homedir();
+  const home = homeRoot ?? os.homedir();
 
   let dataDir: string;
   if (platform === 'darwin') {

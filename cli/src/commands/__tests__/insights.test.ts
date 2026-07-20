@@ -155,7 +155,7 @@ describe('V8 migration — session_message_count column', () => {
     db.close();
   });
 
-  it('double-apply leaves exactly one schema_version row per version (now up to 8)', () => {
+  it('double-apply leaves exactly one schema_version row per version (now up to 10)', () => {
     const db = new Database(':memory:');
     runMigrations(db);
     runMigrations(db);
@@ -164,7 +164,7 @@ describe('V8 migration — session_message_count column', () => {
       .prepare('SELECT version FROM schema_version ORDER BY version')
       .all() as Array<{ version: number }>;
 
-    expect(rows.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(rows.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     db.close();
   });
 

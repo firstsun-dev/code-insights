@@ -8,7 +8,7 @@ export interface SessionProvider {
   getProviderName(): string;
 
   /** Discover session files/databases on this machine */
-  discover(options?: { projectFilter?: string }): Promise<string[]>;
+  discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]>;
 
   /** Parse a single session file into normalized format */
   parse(filePath: string): Promise<ParsedSession | null>;
