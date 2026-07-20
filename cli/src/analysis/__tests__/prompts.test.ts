@@ -37,6 +37,21 @@ function makeMessage(overrides: Partial<SQLiteMessageRow> = {}): SQLiteMessageRo
   };
 }
 
+// Matches a "### <label>:" role header, tolerating the optional
+// " | +Ns" delta-timestamp and " | Nk tokens" suffixes that
+// formatMessagesForAnalysis appends to every message after the first.
+// For bracketed labels (e.g. "[system]") the suffix is inserted before the
+// closing bracket; for bare labels (e.g. "User#1") it's appended before the colon.
+function roleHeader(label: string): RegExp {
+  const suffix = '(?: \\|[^\\n\\]]*)?';
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (label.endsWith(']')) {
+    const inner = escape(label.slice(0, -1));
+    return new RegExp(`### ${inner}${suffix}\\]:`);
+  }
+  return new RegExp(`### ${escape(label)}${suffix}:`);
+}
+
 // ──────────────────────────────────────────────────────
 // classifyStoredUserMessage
 // ──────────────────────────────────────────────────────
@@ -178,7 +193,7 @@ describe('formatMessagesForAnalysis', () => {
     const result = formatMessagesForAnalysis(messages);
     expect(result).toContain('### User#0:');
     expect(result).toContain('Fix the bug');
-    expect(result).toContain('### Assistant#0:');
+    expect(result).toMatch(roleHeader('Assistant#0'));
     expect(result).toContain('Done!');
   });
 
@@ -261,12 +276,12 @@ describe('formatMessagesForAnalysis', () => {
     ];
     const result = formatMessagesForAnalysis(messages);
     // First and second human messages get indices 0 and 1 (tool-result in between skipped)
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('User#1'));
     // No User#2 should appear (only 2 human messages)
     expect(result).not.toContain('User#2');
     // Tool-result gets [tool-result] label
-    expect(result).toContain('### [tool-result]:');
+    expect(result).toMatch(roleHeader('[tool-result]'));
   });
 
   it('labels auto-compact user messages as [auto-compact] and does NOT increment User#N', () => {
@@ -277,9 +292,9 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: 'msg-3', type: 'user', content: 'Continue work' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### [auto-compact]:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('[auto-compact]'));
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -291,10 +306,10 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: 'msg-3', type: 'user', content: 'Continue work' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### [system]:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('[system]'));
     expect(result).not.toContain('[auto-compact]');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -307,11 +322,11 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: '4', type: 'user', content: 'Continue' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### [system]:');
-    expect(result).toContain('### [auto-compact]:');
+    expect(result).toMatch(roleHeader('[system]'));
+    expect(result).toMatch(roleHeader('[auto-compact]'));
     // User index should still count only genuine human messages (2 of them: 'Do something' + 'Continue')
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -331,7 +346,7 @@ describe('formatMessagesForAnalysis', () => {
     expect(result).toContain('User#2');
     expect(result).not.toContain('User#3');
     // Two [tool-result] blocks appear
-    const toolResultCount = (result.match(/\[tool-result\]/g) ?? []).length;
+    const toolResultCount = (result.match(/\[tool-result(?: \|[^\]]*)?\]/g) ?? []).length;
     expect(toolResultCount).toBe(2);
   });
 });
