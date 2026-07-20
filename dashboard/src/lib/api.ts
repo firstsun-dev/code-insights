@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -495,5 +495,51 @@ export interface AnalysisQueueStatus {
 
 export function fetchAnalysisQueue() {
   return request<AnalysisQueueStatus>('/analysis/queue');
+}
+
+// ── Facets ─────────────────────────────────────────────────────────────────────
+
+export interface FacetRow {
+  session_id: string;
+  outcome_satisfaction: string;
+  workflow_pattern: string | null;
+  had_course_correction: number;
+  course_correction_reason: string | null;
+  iteration_count: number;
+  friction_points: string;
+  effective_patterns: string;
+  extracted_at: string;
+  analysis_version: string;
+}
+
+export interface FacetsResponse {
+  facets: FacetRow[];
+  missingCount: number;
+  totalSessions: number;
+}
+
+export function fetchFacets(params?: { project?: string; period?: string; source?: string }) {
+  const query = new URLSearchParams();
+  if (params?.project) query.set('project', params.project);
+  if (params?.period) query.set('period', params.period);
+  if (params?.source) query.set('source', params.source);
+  const qs = query.toString();
+  return request<FacetsResponse>(`/facets${qs ? `?${qs}` : ''}`);
+}
+
+// ── Dispatch (LLM-powered post generation) ──────────────────────────────────────
+
+export function generateDispatch(body: DispatchRequest) {
+  return request<DispatchResponse>('/dispatch/generate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function generateDispatchImagePrompt(body: DispatchImagePromptRequest) {
+  return request<DispatchImagePromptResponse>('/dispatch/image-prompt', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
