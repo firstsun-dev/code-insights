@@ -41,6 +41,7 @@ Code Insights is a local-first analytics platform designed to extract structured
 | Gemini CLI | `~/.gemini/tmp/<project_hash>/chats/*.json` |
 | Hermes Agent | `~/.hermes/state.db` and `~/.hermes/profiles/<profile_name>/state.db` |
 | OpenCode | `~/.local/share/opencode/storage/session/*.json` |
+| Kilo | `~/.local/share/kilo/kilo.db` |
 | Crush | Project-specific `.crush/crush.db` |
 
 ## Demo
