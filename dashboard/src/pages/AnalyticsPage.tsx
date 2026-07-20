@@ -39,7 +39,10 @@ export default function AnalyticsPage() {
     ...(source !== 'all' && { sourceTool: source }),
   });
   const { data: insights = [], isLoading: insightsLoading, isError: insightsError, refetch: refetchInsights } = useInsights();
-  const { data: projects = [], isLoading: projectsLoading, isError: projectsError, refetch: refetchProjects } = useProjects();
+  // Fetch the full project list (not capped by the session/date-range window below) so
+  // the "All Projects" table can show every project, not just ones with recent sessions.
+  const { data: projects = [], isLoading: projectsLoading, isError: projectsError, refetch: refetchProjects } = useProjects({ limit: 1000 });
+  const [projectPage, setProjectPage] = useState(0);
   const { tooltipBg, tooltipBorder } = useThemeColors();
 
   const loading = sessionsLoading || insightsLoading || projectsLoading;
@@ -97,7 +100,8 @@ export default function AnalyticsPage() {
     prompt_quality: filteredInsights.filter((i) => i.type === 'prompt_quality').length,
   }), [filteredInsights]);
 
-  // Project stats
+  // Project stats — seeded from the full project list so every project appears
+  // in the table, then filled in with counts scoped to the selected range/source.
   const projectStats = useMemo(() => {
     const statsMap: Record<
       string,
@@ -111,6 +115,18 @@ export default function AnalyticsPage() {
         estimatedCostUsd: number;
       }
     > = {};
+
+    for (const p of projects) {
+      statsMap[p.id] = {
+        projectId: p.id,
+        projectName: p.name,
+        sessionCount: 0,
+        insightCounts: { summary: 0, decision: 0, learning: 0, prompt_quality: 0 },
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        estimatedCostUsd: 0,
+      };
+    }
 
     for (const s of filteredSessions) {
       if (!statsMap[s.project_id]) {
@@ -140,7 +156,17 @@ export default function AnalyticsPage() {
     }
 
     return Object.values(statsMap).sort((a, b) => b.sessionCount - a.sessionCount);
-  }, [filteredSessions, filteredInsights]);
+  }, [projects, filteredSessions, filteredInsights]);
+
+  const PROJECT_PAGE_SIZE = 10;
+  const projectPageCount = Math.max(1, Math.ceil(projectStats.length / PROJECT_PAGE_SIZE));
+  // Clamp rather than reset via effect: keeps this a pure render-time derivation
+  // even when a range/source change shrinks the list out from under the current page.
+  const currentProjectPage = Math.min(projectPage, projectPageCount - 1);
+  const pagedProjectStats = projectStats.slice(
+    currentProjectPage * PROJECT_PAGE_SIZE,
+    (currentProjectPage + 1) * PROJECT_PAGE_SIZE
+  );
 
   // Model distribution
   const modelDistribution = useMemo(() => {
@@ -396,7 +422,7 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {projectStats.map((project) => {
+                {pagedProjectStats.map((project) => {
                   const tokens =
                     project.totalInputTokens + project.totalOutputTokens;
                   return (
@@ -427,6 +453,38 @@ export default function AnalyticsPage() {
               </tbody>
             </table>
           </div>
+          {projectStats.length > PROJECT_PAGE_SIZE && (
+            <div className="flex items-center justify-between pt-4">
+              <p className="text-xs text-muted-foreground">
+                Showing {currentProjectPage * PROJECT_PAGE_SIZE + 1}
+                –{Math.min((currentProjectPage + 1) * PROJECT_PAGE_SIZE, projectStats.length)} of{' '}
+                {projectStats.length} projects
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  disabled={currentProjectPage === 0}
+                  onClick={() => setProjectPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Page {currentProjectPage + 1} of {projectPageCount}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  disabled={currentProjectPage >= projectPageCount - 1}
+                  onClick={() => setProjectPage((p) => Math.min(projectPageCount - 1, p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
