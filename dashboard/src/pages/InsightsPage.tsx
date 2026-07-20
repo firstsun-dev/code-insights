@@ -254,7 +254,8 @@ export default function InsightsPage() {
     for (const insight of filtered) {
       let key: string;
       if (view === 'type') {
-        key = insight.type;
+        // 'technique' is a legacy alias displayed as "Learning" — merge into the same group.
+        key = insight.type === 'technique' ? 'learning' : insight.type;
       } else if (view === 'project') {
         key = insight.project_name;
       } else if (view === 'session') {
