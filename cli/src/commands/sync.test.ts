@@ -21,6 +21,12 @@ vi.mock('../db/client.js', () => ({
   getMigrationResult: () => ({ v6Applied: false }),
 }));
 
+vi.mock('../db/homes.js', () => ({
+  listHomes: () => [
+    { id: 'default', label: 'This machine', path: os.homedir(), enabled: true, createdAt: '2025-01-01T00:00:00.000Z' },
+  ],
+}));
+
 const insertSessionWithProjectAndReturnIsNew = vi.fn();
 const insertMessages = vi.fn();
 const recalculateUsageStats = vi.fn(() => ({ sessionsWithUsage: 0, totalTokens: 0, estimatedCostUsd: 0 }));
@@ -101,6 +107,7 @@ describe('runSync', () => {
     expect(insertSessionWithProjectAndReturnIsNew).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'session-1' }),
       false,
+      'default',
     );
     expect(insertMessages).toHaveBeenCalledTimes(1);
     expect(recalculateUsageStats).toHaveBeenCalledTimes(1);
@@ -146,6 +153,7 @@ describe('runSync', () => {
     expect(insertSessionWithProjectAndReturnIsNew).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'cursor:composer-1' }),
       false,
+      'default',
     );
     expect(recalculateUsageStats).toHaveBeenCalledTimes(1);
   });

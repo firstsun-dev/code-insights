@@ -17,6 +17,7 @@ import { insightsCommand, insightsCheckCommand } from './commands/insights.js';
 import { buildOptimizeCommand } from './commands/optimize.js';
 import { buildQueueCommand } from './commands/queue.js';
 import { buildEmbeddingsCommand } from './commands/embeddings.js';
+import { buildHomeCommand } from './commands/home.js';
 import { sessionEndCommand } from './commands/session-end.js';
 import { doctorCommand } from './commands/doctor/index.js';
 import { showTelemetryNoticeIfNeeded } from './utils/telemetry.js';
@@ -45,7 +46,8 @@ const syncCmd = program
   .option('-q, --quiet', 'Suppress output (useful for hooks)')
   .option('-v, --verbose', 'Show diagnostic warnings from providers')
   .option('--regenerate-titles', 'Regenerate titles for all sessions')
-  .action(syncCommand);
+  .option('--home <id>', 'Only sync a specific home (repeatable)', (val, prev) => prev.concat([val]), [] as string[])
+  .action((opts) => syncCommand({ ...opts, homeId: opts.home }));
 
 syncCmd
   .command('prune')
@@ -133,6 +135,7 @@ program.addCommand(telemetryCommand);
 program.addCommand(reflectCommand);
 program.addCommand(buildQueueCommand());
 program.addCommand(buildEmbeddingsCommand());
+program.addCommand(buildHomeCommand());
 program.addCommand(buildOptimizeCommand());
 
 program
