@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchProjects, fetchProject, patchProject } from '@/lib/api';
 
-export function useProjects() {
+export function useProjects(params?: { limit?: number; offset?: number }) {
   return useQuery({
-    queryKey: ['projects'],
-    queryFn: () => fetchProjects().then((r) => r.projects),
+    queryKey: ['projects', params],
+    queryFn: () => fetchProjects(params).then((r) => r.projects),
     refetchInterval: 60_000,
   });
 }
