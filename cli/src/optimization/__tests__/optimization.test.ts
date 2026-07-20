@@ -329,7 +329,7 @@ describe('scalarizeScores', () => {
   });
 
   it('uses default weights when none provided', () => {
-    const scores = { coverage: 1.0, precision: 1.0, actionability: 1.0, brevity: 1.0 };
+    const scores = { coverage: 1.0, precision: 1.0, actionability: 1.0, brevity: 1.0, prompt_refinement: 1.0 };
 
     const result = scalarizeScores(scores);
 
