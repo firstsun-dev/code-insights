@@ -194,3 +194,76 @@ describe('runMigrations — V12 multi-home support', () => {
     db.close();
   });
 });
+
+describe('runMigrations — V13 personality_snapshots table', () => {
+  it('creates personality_snapshots with the expected columns and composite PK (period, project_id)', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    const columns = db.prepare(`PRAGMA table_info(personality_snapshots)`).all() as Array<{
+      name: string; notnull: number; dflt_value: string | null; pk: number;
+    }>;
+
+    const byName = Object.fromEntries(columns.map(c => [c.name, c]));
+    expect(Object.keys(byName).sort()).toEqual(
+      ['facet_count', 'generated_at', 'period', 'project_id', 'results_json', 'session_count', 'window_end', 'window_start'].sort()
+    );
+
+    // Composite PK (period, project_id) — pk column is 1-indexed position within the key,
+    // 0 means "not part of the primary key".
+    expect(byName.period.pk).toBe(1);
+    expect(byName.project_id.pk).toBe(2);
+    expect(byName.results_json.notnull).toBe(1);
+    expect(byName.generated_at.notnull).toBe(1);
+
+    db.close();
+  });
+
+  it('enforces the (period, project_id) composite PK — duplicate insert without ON CONFLICT throws', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    const insert = `INSERT INTO personality_snapshots (period, project_id, results_json, generated_at) VALUES (?, ?, '{}', datetime('now'))`;
+    db.prepare(insert).run('2026-W29', '__all__');
+
+    expect(() => {
+      db.prepare(insert).run('2026-W29', '__all__');
+    }).toThrow();
+
+    db.close();
+  });
+
+  // This is the guarantee the whole "dedicated table, not shared with reflect_snapshots"
+  // design decision rests on: applying/re-applying migrations (including V13) must never
+  // touch reflect_snapshots rows. Without this test, that guarantee is only verified by
+  // code review, not locked in by a test that would fail if migrate.ts ever regressed
+  // (e.g. someone "simplifies" by writing personality data into reflect_snapshots).
+  it('does not alter reflect_snapshots row count or content', () => {
+    const db = freshDb();
+    runMigrations(db);
+
+    db.prepare(`
+      INSERT INTO reflect_snapshots (period, project_id, results_json, generated_at, window_end, session_count, facet_count)
+      VALUES ('2026-W29', '__all__', '{"marker":"untouched"}', datetime('now'), datetime('now'), 5, 5)
+    `).run();
+
+    const before = db.prepare(`SELECT * FROM reflect_snapshots`).all();
+
+    // Re-running migrations (a realistic scenario: every CLI/server startup calls this)
+    // must not mutate reflect_snapshots, even though personality_snapshots now exists
+    // alongside it.
+    runMigrations(db);
+
+    const after = db.prepare(`SELECT * FROM reflect_snapshots`).all();
+    expect(after).toEqual(before);
+    expect(after).toHaveLength(1);
+    expect((after[0] as { results_json: string }).results_json).toBe('{"marker":"untouched"}');
+
+    // And personality_snapshots remains empty — inserting into reflect_snapshots must
+    // never implicitly populate the personality table either.
+    const personalityRows = db.prepare(`SELECT COUNT(*) as n FROM personality_snapshots`).get() as { n: number };
+    expect(personalityRows.n).toBe(0);
+
+    db.close();
+  });
+});
