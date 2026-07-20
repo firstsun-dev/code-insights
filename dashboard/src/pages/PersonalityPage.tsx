@@ -13,13 +13,19 @@ import { ProjectPersonalitySwitcher } from '@/components/personality/ProjectPers
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorCard } from '@/components/ErrorCard';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import type { PersonalityProfile } from '@/lib/types';
 
 export default function PersonalityPage() {
   const [projectId, setProjectId] = useState<string>('__all__');
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
+  // Persists independently of `generating` — an SSE `error` event (or a thrown fetch
+  // error) must stay visible to the user after the stream closes and `generating`
+  // flips back to false in the `finally` block below. Only cleared on retry or scope
+  // change, never implicitly by the generation lifecycle itself.
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [localProfile, setLocalProfile] = useState<PersonalityProfile | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
@@ -37,10 +43,12 @@ export default function PersonalityPage() {
     return () => { abortRef.current?.abort(); };
   }, []);
 
-  // Reset local (freshly-generated) profile whenever the scope changes so we fall
-  // back to the fetched profile for the new scope instead of showing stale data.
+  // Reset local (freshly-generated) profile and any stale error whenever the scope
+  // changes so we fall back to the fetched profile for the new scope instead of
+  // showing stale data or an error from a different project/period.
   useEffect(() => {
     setLocalProfile(null);
+    setGenerationError(null);
   }, [projectId]);
 
   const handleGenerate = useCallback(async () => {
@@ -50,6 +58,7 @@ export default function PersonalityPage() {
 
     setGenerating(true);
     setGenerationProgress('Starting...');
+    setGenerationError(null); // clear any previous error on retry
 
     try {
       const response = await personalityGenerateStream(
@@ -73,13 +82,15 @@ export default function PersonalityPage() {
         } else if (event.event === 'error') {
           try {
             const data = JSON.parse(event.data) as { error?: string };
-            setGenerationProgress(`Error: ${data.error ?? 'Unknown error'}`);
-          } catch { /* skip malformed event */ }
+            setGenerationError(data.error ?? 'Unknown error');
+          } catch {
+            setGenerationError('Generation failed with an unreadable error response.');
+          }
         }
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      setGenerationProgress(err instanceof Error ? err.message : 'Generation failed');
+      setGenerationError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
       setGenerating(false);
     }
@@ -141,6 +152,16 @@ export default function PersonalityPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Persists after the SSE stream closes (generating -> false) so the user can
+          actually read what went wrong, instead of the message vanishing on the same
+          tick the "generating" spinner disappears. */}
+      {!generating && generationError && (
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{generationError}</AlertDescription>
+        </Alert>
       )}
 
       {profile && (
