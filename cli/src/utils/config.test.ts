@@ -159,7 +159,7 @@ describe('config utilities', () => {
       expect(parsed.telemetry).toBe(false);
     });
 
-    it('strips apiKey from dashboard.llm before writing to disk', () => {
+    it('persists apiKey in dashboard.llm so users can set once and reuse', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
 
       const config = {
@@ -177,11 +177,10 @@ describe('config utilities', () => {
 
       const [, writtenContent] = vi.mocked(fs.writeFileSync).mock.calls[0];
       const parsed = JSON.parse(writtenContent as string);
-      // apiKey must not appear in the persisted file
-      expect(parsed.dashboard?.llm).not.toHaveProperty('apiKey');
       expect(parsed.dashboard?.llm).toEqual({
         provider: 'openai',
         model: 'gpt-4o',
+        apiKey: 'sk-super-secret-key',
       });
     });
 
