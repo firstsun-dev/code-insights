@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -170,6 +170,12 @@ export function fetchDashboardStats(range: '7d' | '30d' | '90d' | 'all' = '7d', 
   const q = new URLSearchParams({ range });
   if (homeId) q.set('homeId', homeId);
   return request<{ range: string; stats: DashboardStats }>(`/analytics/dashboard?${q}`);
+}
+
+export function fetchDailyStats(range: '7d' | '30d' | '90d' | 'all' = '7d', homeId?: string) {
+  const q = new URLSearchParams({ range });
+  if (homeId) q.set('homeId', homeId);
+  return request<{ range: string; daily: DailyStats[] }>(`/analytics/daily?${q}`);
 }
 
 // ── Analysis (Phase 4) ────────────────────────────────────────────────────────
