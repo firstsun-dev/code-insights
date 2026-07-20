@@ -32,6 +32,7 @@ export default function SessionsPage() {
     q: '',
     project: 'all',
     source: 'all',
+    homeId: 'all',
     character: 'all',
     status: 'all',
     dateRange: 'all',
@@ -44,11 +45,12 @@ export default function SessionsPage() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
 
   const sessionParams = useMemo(() => {
-    const params: { projectId?: string; sourceTool?: string; limit?: number } = { limit: 200 };
+    const params: { projectId?: string; sourceTool?: string; homeId?: string; limit?: number } = { limit: 200 };
     if (filters.project !== 'all') params.projectId = filters.project;
     if (filters.source !== 'all') params.sourceTool = filters.source;
+    if (filters.homeId !== 'all') params.homeId = filters.homeId;
     return params;
-  }, [filters.project, filters.source]);
+  }, [filters.project, filters.source, filters.homeId]);
 
   const { data: sessions = [], isLoading: sessionsLoading } = useSessions(sessionParams);
   const { data: insights = [], isLoading: insightsLoading } = useInsights();
@@ -84,7 +86,7 @@ export default function SessionsPage() {
   );
 
   const handleFilterChange = useCallback(
-    (key: 'q' | 'character' | 'status' | 'dateRange' | 'dateFrom' | 'dateTo' | 'outcome' | 'source', value: string) => {
+    (key: 'q' | 'character' | 'status' | 'dateRange' | 'dateFrom' | 'dateTo' | 'outcome' | 'source' | 'homeId', value: string) => {
       setFilter(key, value);
     },
     [setFilter]
@@ -98,7 +100,7 @@ export default function SessionsPage() {
   );
 
   const handleClearFilters = useCallback(() => {
-    setFilters({ q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all' });
+    setFilters({ q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all' });
   }, [setFilters]);
 
   const selectedProjectName = useMemo(() => {
@@ -166,6 +168,7 @@ export default function SessionsPage() {
             dateTo: filters.dateTo,
             outcome: filters.outcome,
             source: filters.source,
+            homeId: filters.homeId,
           }}
           onFilterChange={handleFilterChange}
           onSetFilters={handleSetFilters}

@@ -24,6 +24,7 @@ import { useQueuedSessionIds } from '@/hooks/useAnalysisQueue';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { HomeSelect } from '@/components/filters/HomeSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
 import { subDays, startOfDay, formatISO } from 'date-fns';
 
@@ -68,9 +69,10 @@ interface SessionListPanelProps {
     dateTo: string;
     outcome: string;
     source: string;
+    homeId: string;
   };
   onFilterChange: (
-    key: 'q' | 'character' | 'status' | 'dateRange' | 'dateFrom' | 'dateTo' | 'outcome' | 'source',
+    key: 'q' | 'character' | 'status' | 'dateRange' | 'dateFrom' | 'dateTo' | 'outcome' | 'source' | 'homeId',
     value: string
   ) => void;
   onSetFilters: (updates: Record<string, string>) => void;
@@ -196,11 +198,12 @@ export function SessionListPanel({
     !!filters.q ||
     (!!filters.dateRange && filters.dateRange !== 'all') ||
     (!!filters.outcome && filters.outcome !== 'all') ||
-    filters.source !== 'all';
+    filters.source !== 'all' ||
+    filters.homeId !== 'all';
 
   const allFiltersForSave = { ...filters } as Record<string, string>;
   const defaultFilterValues: Record<string, string> = {
-    q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all',
+    q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all',
   };
 
   const dateRangeLabel = useMemo(() => {
@@ -345,6 +348,12 @@ export function SessionListPanel({
           <SourceToolSelect
             value={filters.source || 'all'}
             onValueChange={(v) => onFilterChange('source', v)}
+            className="h-7 text-xs flex-1"
+          />
+
+          <HomeSelect
+            value={filters.homeId || 'all'}
+            onValueChange={(v) => onFilterChange('homeId', v)}
             className="h-7 text-xs flex-1"
           />
 
