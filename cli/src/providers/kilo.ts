@@ -336,6 +336,18 @@ export class KiloProvider implements SessionProvider {
 
       this.log('debug', `Found session ${sessionId}: ${sessionRow.title || sessionRow.slug || 'untitled'}`);
 
+      // session.model is stored as a JSON string, e.g. {"id":"deepseek-v4-pro","providerID":"..."}
+      let sessionModel: { id?: string } = {};
+      if (typeof sessionRow.model === 'string' && sessionRow.model) {
+        try {
+          sessionModel = this.parseJsonSafely(sessionRow.model, `session ${sessionId} model`);
+        } catch (e) {
+          this.log('warn', `Failed to parse session model for ${sessionId}`, e);
+        }
+      } else if (sessionRow.model && typeof sessionRow.model === 'object') {
+        sessionModel = sessionRow.model;
+      }
+
       // Check if message and part tables exist
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
       const hasMessageTable = tables.some(t => t.name === 'message');
@@ -443,7 +455,7 @@ export class KiloProvider implements SessionProvider {
             // Step-finish parts contain per-message token usage
             // Only use if session doesn't have session-level token columns (which are totals)
             if (!msgUsage && !sessionRow.tokens_input) {
-              const model = msgData.model?.modelID || sessionRow.model?.id || 'unknown';
+              const model = msgData.model?.modelID || sessionModel.id || 'unknown';
               msgUsage = {
                 inputTokens: partData.tokens.input || 0,
                 outputTokens: partData.tokens.output || 0,
@@ -458,7 +470,7 @@ export class KiloProvider implements SessionProvider {
 
         const type = role === 'assistant' ? 'assistant' : (role === 'user' ? 'user' : 'system');
 
-        const model = msgData.model?.modelID || sessionRow.model?.id || 'unknown';
+        const model = msgData.model?.modelID || sessionModel.id || 'unknown';
 
         // Kilo has session-level token columns: tokens_input, tokens_output, tokens_cache_read, tokens_cache_write, cost
         // These are session totals, not per-message. If they exist, use them for the first assistant message only.

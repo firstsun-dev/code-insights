@@ -214,6 +214,7 @@ function parseFormatA(content: string): ParsedSession | null {
   let currentToolResults: ToolResult[] = [];
   let currentThinking: string | null = null;
   let turnUsage: CodexUsage | null = null;
+  let pendingTokenUsage: CodexUsage | null = null;
   let toolCounter = 0;
 
   function flushAssistantTurn(): void {
@@ -411,16 +412,30 @@ function parseFormatA(content: string): ParsedSession | null {
 
       case 'task_complete': {
         // event_msg/task_complete: turn boundary — replaces the non-existent "turn.completed"
-        // Capture usage if present
-        const usageRaw = payload.usage as CodexUsage | undefined;
+        // Capture usage if present (older format). Newer builds omit it here entirely
+        // and report tokens via token_count events instead — fall back to that.
+        const usageRaw = (payload.usage as CodexUsage | undefined) || pendingTokenUsage || undefined;
         if (usageRaw?.input_tokens) {
           turnUsage = usageRaw;
           usageEntries.push(usageRaw);
         }
+        pendingTokenUsage = null;
         if (payload.model) {
           model = payload.model as string;
         }
         flushAssistantTurn();
+        break;
+      }
+
+      case 'token_count': {
+        // event_msg/token_count: newer Codex builds report per-turn token usage here
+        // (payload.info.last_token_usage) instead of on task_complete. Keep only the
+        // latest snapshot for the in-flight turn — task_complete consumes it.
+        const info = payload.info as Record<string, unknown> | undefined;
+        const lastUsage = info?.last_token_usage as CodexUsage | undefined;
+        if (lastUsage?.input_tokens) {
+          pendingTokenUsage = lastUsage;
+        }
         break;
       }
 
@@ -438,12 +453,19 @@ function parseFormatA(content: string): ParsedSession | null {
         break;
       }
 
+      case 'turn_context': {
+        // Newer Codex CLI/Desktop builds report the active model here instead of
+        // session_meta or task_complete — capture it, but keep skipping the rest.
+        if (payload.model) {
+          model = payload.model as string;
+        }
+        break;
+      }
+
       case 'turn.started':
       case 'thread.started':
       case 'session_meta':
       case 'task_started':
-      case 'token_count':
-      case 'turn_context':
         // Lifecycle/telemetry events — skip
         break;
 
