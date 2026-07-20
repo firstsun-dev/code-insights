@@ -2,6 +2,12 @@ packages:
   - 'cli'
   - 'dashboard'
   - 'server'
-allowBuilds:
-  better-sqlite3: true
-  esbuild: false
+
+# better-sqlite3's postinstall script compiles/downloads its native binding —
+# pnpm blocks all dependency install scripts by default, so without this
+# explicit allowlist a clean `pnpm install` (e.g. in Docker, or any fresh
+# clone) silently produces a package with no working native binding at all.
+# (Replaces a prior `allowBuilds:` key here, which is not a real pnpm-workspace.yaml
+# setting and was silently ignored — better-sqlite3's build script never actually ran.)
+onlyBuiltDependencies:
+  - better-sqlite3

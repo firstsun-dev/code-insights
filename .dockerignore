@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+cli/dashboard-dist
+cli/server-dist
+.git
+.claude
+.kilo
+.omo
+graphify-out
+*.log
+.env
+.env.*
+!.env.example
