@@ -1,8 +1,18 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { parseIntParam } from '../utils.js';
+import {
+  SearchResponseSchema,
+  SearchQuerySchema,
+  SearchSessionResultSchema,
+  SearchInsightResultSchema,
+} from '../schemas/search.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
 
 /**
  * GET /api/search?q=<query>&limit=20
@@ -12,12 +22,24 @@ const app = new Hono();
  *
  * Response: { sessions: SearchSession[], insights: SearchInsight[] }
  */
-app.get('/', (c) => {
+const searchRoute = createRoute({
+  method: 'get',
+  path: '/',
+  request: { query: SearchQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: SearchResponseSchema } },
+      description: 'Sessions and insights matching the query',
+    },
+  },
+});
+
+app.openapi(searchRoute, (c) => {
   const db = getDb();
   const { q, limit } = c.req.query();
 
   if (!q || q.trim().length === 0) {
-    return c.json({ sessions: [], insights: [] });
+    return c.json({ sessions: [], insights: [] }, 200);
   }
 
   const searchTerm = q.trim();
@@ -103,7 +125,7 @@ app.get('/', (c) => {
   }>;
 
   // Build session title from title_source priority: custom_title > generated_title > fallback
-  const sessionResults = sessions.map((s) => {
+  const sessionResults: z.infer<typeof SearchSessionResultSchema>[] = sessions.map((s) => {
     const title = s.custom_title || s.generated_title || 'Untitled session';
     const sourceText = s.match_field === 'summary' && s.summary
       ? s.summary
@@ -113,14 +135,14 @@ app.get('/', (c) => {
       id: s.id,
       title,
       project_name: s.project_name,
-      session_character: s.session_character,
+      session_character: s.session_character as z.infer<typeof SearchSessionResultSchema>['session_character'],
       started_at: s.started_at,
       match_field: s.match_field as 'title' | 'summary',
       snippet,
     };
   });
 
-  const insightResults = insights.map((i) => {
+  const insightResults: z.infer<typeof SearchInsightResultSchema>[] = insights.map((i) => {
     const sourceText = i.title.toLowerCase().includes(searchTerm.toLowerCase())
       ? i.title
       : i.content || i.insight_summary;
@@ -136,7 +158,7 @@ app.get('/', (c) => {
     };
   });
 
-  return c.json({ sessions: sessionResults, insights: insightResults });
+  return c.json({ sessions: sessionResults, insights: insightResults }, 200);
 });
 
 /** Escape SQLite LIKE wildcard characters so user input is treated as literal text. */

@@ -1,11 +1,30 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { loadConfig, saveConfig } from '@code-insights/cli/utils/config';
 import type { ClaudeInsightConfig, LLMProviderConfig } from '@code-insights/cli/types';
 import { loadLLMConfig, testLLMConfig } from '../llm/client.js';
 import { discoverOllamaModels } from '../llm/providers/ollama.js';
 import { discoverModels } from '../llm/discover.js';
+import { ErrorSchema, OkSchema } from '../schemas/common.js';
+import {
+  LLMConfigResponseSchema,
+  LLMTestResponseSchema,
+  OllamaModelsResponseSchema,
+  OllamaModelsQuerySchema,
+  DiscoverModelsResponseSchema,
+} from '../schemas/config.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// Body schemas are intentionally NOT wired into createRoute()'s `request.body`
+// in this pass — every handler below performs its own field presence/shape
+// validation with custom error messages (e.g. "provider must be one of: ...",
+// "model is required when setting LLM config"), which a zod body schema +
+// defaultHook would collapse into a single generic "Invalid request" message
+// that the existing tests assert against more specific substrings.
 
 const VALID_PROVIDERS = ['openai', 'anthropic', 'gemini', 'ollama', 'openrouter', 'mistral', 'openai-compatible'] as const;
 
@@ -33,8 +52,18 @@ function describeApiKeySource(provider: string, storedKey?: string): 'env' | 'st
   return 'none';
 }
 
-// GET /api/config/llm — return full config (API key masked for security)
-app.get('/llm', (c) => {
+const getLlmConfigRoute = createRoute({
+  method: 'get',
+  path: '/llm',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: LLMConfigResponseSchema } },
+      description: 'Current LLM config (API key masked)',
+    },
+  },
+});
+
+app.openapi(getLlmConfigRoute, (c) => {
   const config = loadConfig();
   const llm = config?.dashboard?.llm;
 
@@ -45,11 +74,25 @@ app.get('/llm', (c) => {
     apiKey: llm?.apiKey ? '***' : undefined, // Always mask when present
     apiKeySource: llm ? describeApiKeySource(llm.provider, llm.apiKey) : 'none',
     baseUrl: llm?.baseUrl,
-  });
+  }, 200);
 });
 
-// PUT /api/config/llm — update dashboard port and/or LLM config
-app.put('/llm', async (c) => {
+const putLlmConfigRoute = createRoute({
+  method: 'put',
+  path: '/llm',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: OkSchema } },
+      description: 'LLM config updated (or no-op if no fields provided)',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid dashboardPort, provider, or missing model',
+    },
+  },
+});
+
+app.openapi(putLlmConfigRoute, async (c) => {
   const body = await c.req.json<{
     dashboardPort?: number;
     provider?: string;
@@ -106,15 +149,33 @@ app.put('/llm', async (c) => {
   }
 
   if (!changed) {
-    return c.json({ ok: true });
+    return c.json({ ok: true as const }, 200);
   }
 
   saveConfig(config);
-  return c.json({ ok: true });
+  return c.json({ ok: true as const }, 200);
 });
 
-// POST /api/config/llm/test — validate LLM credentials with a test call
-app.post('/llm/test', async (c) => {
+const testLlmConfigRoute = createRoute({
+  method: 'post',
+  path: '/llm/test',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: LLMTestResponseSchema } },
+      description: 'Credentials validated successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: LLMTestResponseSchema } },
+      description: 'No LLM config found in body or saved config',
+    },
+    422: {
+      content: { 'application/json': { schema: LLMTestResponseSchema } },
+      description: 'Credentials failed validation',
+    },
+  },
+});
+
+app.openapi(testLlmConfigRoute, async (c) => {
   // Allow testing with body config or existing saved config
   let testConfig: LLMProviderConfig | null = null;
 
@@ -147,15 +208,44 @@ app.post('/llm/test', async (c) => {
   return c.json(result, result.success ? 200 : 422);
 });
 
-// GET /api/config/llm/ollama-models — return locally available Ollama models
-app.get('/llm/ollama-models', async (c) => {
-  const baseUrl = c.req.query('baseUrl');
-  const models = await discoverOllamaModels(baseUrl);
-  return c.json({ models });
+const ollamaModelsRoute = createRoute({
+  method: 'get',
+  path: '/llm/ollama-models',
+  request: { query: OllamaModelsQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: OllamaModelsResponseSchema } },
+      description: 'Locally available Ollama models',
+    },
+  },
 });
 
-// POST /api/config/llm/models — discover models for a provider using an API key
-app.post('/llm/models', async (c) => {
+app.openapi(ollamaModelsRoute, async (c) => {
+  const baseUrl = c.req.query('baseUrl');
+  const models = await discoverOllamaModels(baseUrl);
+  return c.json({ models }, 200);
+});
+
+const discoverModelsRoute = createRoute({
+  method: 'post',
+  path: '/llm/models',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DiscoverModelsResponseSchema } },
+      description: 'Models discovered for the given provider',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'provider is required',
+    },
+    500: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Failed to fetch models from the provider',
+    },
+  },
+});
+
+app.openapi(discoverModelsRoute, async (c) => {
   const body = await c.req.json<{ provider: string, apiKey?: string, baseUrl?: string }>();
 
   if (!body.provider) {
@@ -180,7 +270,7 @@ app.post('/llm/models', async (c) => {
 
   try {
     const models = await discoverModels(body.provider as any, apiKey, body.baseUrl);
-    return c.json({ models });
+    return c.json({ models }, 200);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Failed to fetch models' }, 500);
   }
