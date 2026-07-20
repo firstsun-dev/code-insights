@@ -1,7 +1,13 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { createLLMClient } from '../llm/client.js';
 import { requireLLM } from './route-helpers.js';
+import { ErrorSchema } from '../schemas/common.js';
+import {
+  DispatchResponseSchema,
+  DispatchImagePromptResponseSchema,
+  DispatchImagePromptErrorSchema,
+} from '../schemas/dispatch.js';
 import {
   buildDispatchSystemPrompt,
   buildDispatchContext,
@@ -13,7 +19,17 @@ import {
 } from '../llm/dispatch-prompts.js';
 import type { DispatchTone, DispatchInsight, DispatchFormat, SessionBackground } from '@code-insights/cli/types';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// POST bodies are intentionally NOT wired into createRoute()'s `request.body` —
+// both handlers below perform extensive field-by-field validation with custom
+// error messages (e.g. "Select at least 3 insights to generate a post",
+// "context must be 500 characters or fewer"), which a zod body schema +
+// defaultHook would collapse into a single generic "Invalid request" message.
 
 const VALID_TONES: DispatchTone[] = ['technical', 'accessible', 'quick-tips'];
 const VALID_FORMATS: DispatchFormat[] = ['blog', 'linkedin'];
@@ -43,7 +59,27 @@ interface SessionRow {
 // POST /api/dispatch/generate
 // Body: { insightIds: string[], context: string, tone: DispatchTone, format: DispatchFormat, includeSessionBackground?: boolean }
 // Returns: { markdown, body, format, frontmatter, wordCount, characterCount, degraded, model, tokensUsed }
-app.post('/generate', requireLLM(), async (c) => {
+const generateRoute = createRoute({
+  method: 'post',
+  path: '/generate',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DispatchResponseSchema } },
+      description: 'Post generated successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured, or invalid insightIds/context/tone/format',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'No insights found for the provided IDs',
+    },
+  },
+});
+
+app.openapi(generateRoute, async (c) => {
   const body = await c.req.json<{
     insightIds?: unknown;
     context?: unknown;
@@ -202,13 +238,33 @@ app.post('/generate', requireLLM(), async (c) => {
       input: response.usage?.inputTokens ?? 0,
       output: response.usage?.outputTokens ?? 0,
     },
-  });
+  }, 200);
 });
 
 // POST /api/dispatch/image-prompt
 // Body: { title: string, tags: string[], tldr: string, format: DispatchFormat }
 // Returns: { prompt: string, model: string, tokensUsed: { input: number, output: number } }
-app.post('/image-prompt', requireLLM(), async (c) => {
+const imagePromptRoute = createRoute({
+  method: 'post',
+  path: '/image-prompt',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DispatchImagePromptResponseSchema } },
+      description: 'Image prompt generated successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured, or missing/invalid title/tldr/format',
+    },
+    500: {
+      content: { 'application/json': { schema: DispatchImagePromptErrorSchema } },
+      description: 'Failed to generate image prompt',
+    },
+  },
+});
+
+app.openapi(imagePromptRoute, async (c) => {
   const body = await c.req.json<{
     title?: unknown;
     tags?: unknown;
@@ -255,7 +311,7 @@ app.post('/image-prompt', requireLLM(), async (c) => {
       input: response.usage?.inputTokens ?? 0,
       output: response.usage?.outputTokens ?? 0,
     },
-  });
+  }, 200);
 });
 
 export default app;

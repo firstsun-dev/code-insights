@@ -1,35 +1,53 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { extractFacetsOnly, analyzePromptQuality } from '../llm/analysis.js';
 import { buildWhereClause, getAggregatedData } from './shared-aggregation.js';
+import { ErrorSchema } from '../schemas/common.js';
+import { AggregatedDataSchema } from '../schemas/aggregation.js';
 import {
-  loadSessionForAnalysis,
-  loadSessionMessages,
-  requireLLM,
-  streamBatchBackfill,
-} from './route-helpers.js';
+  FacetsListQuerySchema,
+  FacetsListResponseSchema,
+  SessionIdsResponseSchema,
+  OutdatedResponseSchema,
+} from '../schemas/facets.js';
+import type { FacetRow } from '../schemas/facets.js';
+import { requireLLM, streamBatchBackfill } from './route-helpers.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// POST bodies for /backfill and /backfill-pq are intentionally NOT wired into
+// createRoute()'s `request.body` — the handlers validate sessionIds presence/
+// shape with custom error messages, which a zod body schema + defaultHook
+// would collapse into the generic "Invalid request" message.
+//
+// /backfill and /backfill-pq are SSE endpoints (see route-helpers.ts
+// streamBatchBackfill) — they return a raw streamed Response that doesn't fit
+// a single JSON response schema, so they stay as plain app.post() routes on
+// this OpenAPIHono instance rather than app.openapi(), same as the SSE
+// endpoints in analysis.ts.
 
 const MAX_BACKFILL_SESSIONS = 200;
-
-interface FacetRow {
-  session_id: string;
-  outcome_satisfaction: string;
-  workflow_pattern: string | null;
-  had_course_correction: number;
-  course_correction_reason: string | null;
-  iteration_count: number;
-  friction_points: string;     // JSON
-  effective_patterns: string;  // JSON
-  extracted_at: string;
-  analysis_version: string;
-}
 
 // GET /api/facets
 // Query params: project (project_id), period (7d|30d|90d|all), source (source_tool filter)
 // Returns: { facets, missingCount, totalSessions }
-app.get('/', (c) => {
+const listRoute = createRoute({
+  method: 'get',
+  path: '/',
+  request: { query: FacetsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: FacetsListResponseSchema } },
+      description: 'Session facets in scope, plus counts',
+    },
+  },
+});
+
+app.openapi(listRoute, (c) => {
   const db = getDb();
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
@@ -55,13 +73,25 @@ app.get('/', (c) => {
     facets,
     missingCount: totalRow.count - facets.length,
     totalSessions: totalRow.count,
-  });
+  }, 200);
 });
 
 // GET /api/facets/aggregated
 // Returns pre-aggregated friction categories and effective patterns for synthesis.
 // Uses the shared getAggregatedData function to avoid duplication with reflect routes.
-app.get('/aggregated', (c) => {
+const aggregatedRoute = createRoute({
+  method: 'get',
+  path: '/aggregated',
+  request: { query: FacetsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AggregatedDataSchema } },
+      description: 'Pre-aggregated friction categories and effective patterns',
+    },
+  },
+});
+
+app.openapi(aggregatedRoute, (c) => {
   const db = getDb();
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
@@ -71,13 +101,24 @@ app.get('/aggregated', (c) => {
   const { where, params } = buildWhereClause(period, project, source, homeId);
   const aggregated = getAggregatedData(db, where, params, project, source, homeId);
 
-  return c.json(aggregated);
+  return c.json(aggregated, 200);
 });
 
 // GET /api/facets/missing
 // Returns session IDs that have insights but no session_facets row.
 // Used by CLI `reflect backfill` and dashboard facet status indicators.
-app.get('/missing', (c) => {
+const missingRoute = createRoute({
+  method: 'get',
+  path: '/missing',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: SessionIdsResponseSchema } },
+      description: 'Session IDs with insights but no session_facets row',
+    },
+  },
+});
+
+app.openapi(missingRoute, (c) => {
   const db = getDb();
   const period = c.req.query('period') || 'all';
   const project = c.req.query('project');
@@ -117,7 +158,7 @@ app.get('/missing', (c) => {
   `).all(...params) as Array<{ session_id: string }>;
 
   const sessionIds = rows.map(r => r.session_id);
-  return c.json({ sessionIds, count: sessionIds.length });
+  return c.json({ sessionIds, count: sessionIds.length }, 200);
 });
 
 // GET /api/facets/outdated
@@ -126,7 +167,19 @@ app.get('/missing', (c) => {
 //   - friction_points entries lack an attribution field
 // Accepts period + project to scope to the user's current view — avoids misleading counts
 // when the user is viewing "last 7 days" but sees outdated sessions from all time.
-app.get('/outdated', (c) => {
+const outdatedRoute = createRoute({
+  method: 'get',
+  path: '/outdated',
+  request: { query: FacetsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: OutdatedResponseSchema } },
+      description: 'Session facets rows with outdated schema (missing category/driver/attribution)',
+    },
+  },
+});
+
+app.openapi(outdatedRoute, (c) => {
   const db = getDb();
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
@@ -158,7 +211,7 @@ app.get('/outdated', (c) => {
   `).all(...params, ...params) as Array<{ session_id: string }>;
 
   const sessionIds = rows.map(r => r.session_id);
-  return c.json({ count: sessionIds.length, sessionIds });
+  return c.json({ count: sessionIds.length, sessionIds }, 200);
 });
 
 // POST /api/facets/backfill
@@ -167,7 +220,6 @@ app.get('/outdated', (c) => {
 // force=true skips the existing-facets guard, allowing re-extraction of outdated rows.
 // Uses extractFacetsOnly (lightweight prompt: summary + first/last 20 messages).
 app.post('/backfill', requireLLM(), async (c) => {
-
   const body = await c.req.json<{ sessionIds?: string[]; force?: boolean }>();
   if (!body.sessionIds || !Array.isArray(body.sessionIds) || body.sessionIds.length === 0) {
     return c.json({ error: 'sessionIds array required' }, 400);
@@ -190,7 +242,19 @@ app.post('/backfill', requireLLM(), async (c) => {
 // Returns session IDs that have at least one non-PQ insight but no prompt_quality insight row.
 // Accepts period + project + source to scope results (same params as /missing).
 // Uses buildWhereClause so ISO week periods (e.g., 2026-W10) are supported.
-app.get('/missing-pq', (c) => {
+const missingPqRoute = createRoute({
+  method: 'get',
+  path: '/missing-pq',
+  request: { query: FacetsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: SessionIdsResponseSchema } },
+      description: 'Sessions with a non-PQ insight but no prompt_quality insight',
+    },
+  },
+});
+
+app.openapi(missingPqRoute, (c) => {
   const db = getDb();
   const period = c.req.query('period') || 'all';
   const project = c.req.query('project');
@@ -213,14 +277,26 @@ app.get('/missing-pq', (c) => {
   `).all(...params) as Array<{ session_id: string }>;
 
   const sessionIds = rows.map(r => r.session_id);
-  return c.json({ sessionIds, count: sessionIds.length });
+  return c.json({ sessionIds, count: sessionIds.length }, 200);
 });
 
 // GET /api/facets/outdated-pq
 // Returns session IDs where the prompt_quality insight's metadata lacks a `findings` array
 // (old schema pre-PR #136). Accepts period + project + source to scope results.
 // Uses buildWhereClause so ISO week periods (e.g., 2026-W10) are supported.
-app.get('/outdated-pq', (c) => {
+const outdatedPqRoute = createRoute({
+  method: 'get',
+  path: '/outdated-pq',
+  request: { query: FacetsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: SessionIdsResponseSchema } },
+      description: 'PQ insights with metadata lacking the findings array',
+    },
+  },
+});
+
+app.openapi(outdatedPqRoute, (c) => {
   const db = getDb();
   const period = c.req.query('period') || 'all';
   const project = c.req.query('project');
@@ -240,7 +316,7 @@ app.get('/outdated-pq', (c) => {
   `).all(...params) as Array<{ session_id: string }>;
 
   const sessionIds = rows.map(r => r.session_id);
-  return c.json({ sessionIds, count: sessionIds.length });
+  return c.json({ sessionIds, count: sessionIds.length }, 200);
 });
 
 // POST /api/facets/backfill-pq
@@ -249,7 +325,6 @@ app.get('/outdated-pq', (c) => {
 // force=true skips the existing-PQ-insight guard, allowing re-analysis of sessions with old schema.
 // Uses analyzePromptQuality() from analysis.ts — same function used in the primary analysis pipeline.
 app.post('/backfill-pq', requireLLM(), async (c) => {
-
   const body = await c.req.json<{ sessionIds?: string[]; force?: boolean }>();
   if (!body.sessionIds || !Array.isArray(body.sessionIds) || body.sessionIds.length === 0) {
     return c.json({ error: 'sessionIds array required' }, 400);

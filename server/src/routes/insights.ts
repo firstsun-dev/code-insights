@@ -1,18 +1,42 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { randomUUID } from 'crypto';
 import { parseIntParam } from '../utils.js';
+import { ErrorSchema, OkSchema } from '../schemas/common.js';
+import {
+  InsightSchema,
+  InsightsListResponseSchema,
+  InsightIdParamSchema,
+  InsightsListQuerySchema,
+  CreateInsightResponseSchema,
+} from '../schemas/insights.js';
 
 /** Escape SQLite LIKE wildcard characters so user input is treated as literal text. */
 function escapeLike(s: string): string {
   return s.replace(/[%_\\]/g, '\\$&');
 }
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
 
 const VALID_TYPES = ['summary', 'decision', 'learning', 'technique', 'prompt_quality'] as const;
 
-app.get('/', (c) => {
+const listRoute = createRoute({
+  method: 'get',
+  path: '/',
+  request: { query: InsightsListQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: InsightsListResponseSchema } },
+      description: 'Insights filtered by project/session/type/query',
+    },
+  },
+});
+
+app.openapi(listRoute, (c) => {
   const db = getDb();
   const { projectId, sessionId, type, limit, offset, q } = c.req.query();
 
@@ -47,23 +71,43 @@ app.get('/', (c) => {
     ${where}
     ORDER BY i.timestamp DESC
     LIMIT ? OFFSET ?
-  `).all(...params, parseIntParam(limit, 5000), parseIntParam(offset, 0));
+  `).all(...params, parseIntParam(limit, 5000), parseIntParam(offset, 0)) as z.infer<typeof InsightSchema>[];
 
-  return c.json({ insights });
+  return c.json({ insights }, 200);
 });
 
-app.post('/', async (c) => {
+// POST body is intentionally NOT wired into createRoute()'s `request.body` —
+// the handler performs its own field-by-field validation with custom error
+// messages (e.g. "Missing or invalid field: X", "type must be one of: ...")
+// that the tests assert verbatim. A zod body schema + defaultHook would
+// collapse all of these into a single generic "Invalid request" message.
+const createInsightRoute = createRoute({
+  method: 'post',
+  path: '/',
+  responses: {
+    201: {
+      content: { 'application/json': { schema: CreateInsightResponseSchema } },
+      description: 'Insight created',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Missing/invalid field, unknown type, or invalid confidence',
+    },
+  },
+});
+
+app.openapi(createInsightRoute, async (c) => {
   const db = getDb();
   const body = await c.req.json<{
     sessionId: string;
     projectId: string;
-    projectName?: string;   // optional — defaults to ''
+    projectName?: string; // optional — defaults to ''
     type: string;
     title: string;
     content: string;
-    summary?: string;       // optional — defaults to ''
+    summary?: string; // optional — defaults to ''
     bullets?: string[];
-    confidence?: number;    // optional — defaults to 0
+    confidence?: number; // optional — defaults to 0
     metadata?: Record<string, unknown>;
   }>();
 
@@ -76,7 +120,7 @@ app.post('/', async (c) => {
   }
 
   // Validate type is one of the known insight types
-  if (!VALID_TYPES.includes(body.type as typeof VALID_TYPES[number])) {
+  if (!VALID_TYPES.includes(body.type as (typeof VALID_TYPES)[number])) {
     return c.json({ error: `type must be one of: ${VALID_TYPES.join(', ')}` }, 400);
   }
 
@@ -119,11 +163,27 @@ app.post('/', async (c) => {
   return c.json({ id }, 201);
 });
 
-app.delete('/:id', (c) => {
+const deleteRoute = createRoute({
+  method: 'delete',
+  path: '/{id}',
+  request: { params: InsightIdParamSchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: OkSchema } },
+      description: 'Insight deleted',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Insight not found',
+    },
+  },
+});
+
+app.openapi(deleteRoute, (c) => {
   const db = getDb();
   const result = db.prepare('DELETE FROM insights WHERE id = ?').run(c.req.param('id'));
   if (result.changes === 0) return c.json({ error: 'Not found' }, 404);
-  return c.json({ ok: true });
+  return c.json({ ok: true as const }, 200);
 });
 
 export default app;

@@ -165,7 +165,10 @@ describe('Sessions routes', () => {
       expect(row.custom_title).toBe('My New Title');
     });
 
-    it('returns 400 when customTitle is missing from body', async () => {
+    it('returns 400 when no recognized fields are in the body', async () => {
+      // The handler accepts any of customTitle/projectName/gitRemoteUrl independently
+      // (see dashboard/src/lib/api.ts patchSession) — it only rejects a body with none
+      // of those three fields present, not specifically a missing customTitle.
       seedProject('proj-1', 'alpha');
       seedSession('sess-1', 'proj-1');
 
@@ -177,7 +180,7 @@ describe('Sessions routes', () => {
       });
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('customTitle is required');
+      expect(body.error).toBe('No fields to update');
     });
 
     it('returns 404 when session does not exist', async () => {

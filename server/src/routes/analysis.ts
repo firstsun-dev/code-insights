@@ -1,12 +1,18 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { trackEvent } from '@code-insights/cli/utils/telemetry';
 import { applyGeneratedTitle } from '@code-insights/cli/analysis/analysis-db';
 import { parseIntParam } from '../utils.js';
-import { loadLLMConfig } from '../llm/client.js';
 import { analyzeSession, analyzePromptQuality, findRecurringInsights } from '../llm/analysis.js';
 import { getSessionAnalysisUsage } from '../llm/analysis-usage-db.js';
 import { calculateAnalysisCost } from '../llm/analysis-pricing.js';
+import { ErrorSchema } from '../schemas/common.js';
+import {
+  AnalysisResultSchema,
+  AnalysisUsageResponseSchema,
+  AnalysisUsageQuerySchema,
+  RecurringInsightResultSchema,
+} from '../schemas/analysis.js';
 import {
   loadSessionForAnalysis,
   loadSessionMessages,
@@ -15,13 +21,46 @@ import {
   streamSessionAnalysis,
 } from './route-helpers.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// POST bodies for /session, /prompt-quality, /recurring are intentionally NOT
+// wired into createRoute()'s `request.body` — the handlers validate presence/
+// type of sessionId with custom error messages ("Missing required field:
+// sessionId"), which a zod body schema + defaultHook would collapse into the
+// generic "Invalid request" message.
+//
+// /session/stream and /prompt-quality/stream are SSE endpoints (see
+// route-helpers.ts streamSessionAnalysis) — they return a raw streamed Response
+// that doesn't fit a single JSON response schema, so they stay as plain
+// app.get() routes on this OpenAPIHono instance rather than app.openapi().
+// They're therefore undocumented in the generated OpenAPI spec; this mirrors
+// the same constraint in export.ts's SSE endpoint.
 
 // GET /api/analysis/usage?sessionId=X
 // Returns recorded analysis token usage and cost for a session.
 // Returns an empty usage array (not 404) for sessions with no recorded usage —
 // this is expected for sessions analyzed before V7 or not yet analyzed.
-app.get('/usage', async (c) => {
+const usageRoute = createRoute({
+  method: 'get',
+  path: '/usage',
+  request: { query: AnalysisUsageQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AnalysisUsageResponseSchema } },
+      description: 'Recorded analysis usage and cost for a session',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Missing sessionId query param',
+    },
+  },
+});
+
+app.openapi(usageRoute, (c) => {
   const sessionId = c.req.query('sessionId');
   if (!sessionId) {
     return c.json({ error: 'Missing required query param: sessionId' }, 400);
@@ -58,14 +97,37 @@ app.get('/usage', async (c) => {
     usage,
     totalCostUsd: Math.round(totalCostUsd * 1_000_000) / 1_000_000,
     cacheSavingsUsd: Math.round(cacheSavingsUsd * 1_000_000) / 1_000_000,
-  });
+  }, 200);
 });
-
 
 // POST /api/analysis/session
 // Body: { sessionId: string }
 // Fetches session + messages from SQLite, runs LLM analysis, saves insights, returns results.
-app.post('/session', requireLLM(), async (c) => {
+const sessionAnalysisRoute = createRoute({
+  method: 'post',
+  path: '/session',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AnalysisResultSchema } },
+      description: 'Analysis completed successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured, or missing/invalid sessionId',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Session not found',
+    },
+    422: {
+      content: { 'application/json': { schema: AnalysisResultSchema } },
+      description: 'Analysis failed',
+    },
+  },
+});
+
+app.openapi(sessionAnalysisRoute, async (c) => {
   const body = await c.req.json<{ sessionId?: string }>();
   if (!body.sessionId || typeof body.sessionId !== 'string') {
     return c.json({ error: 'Missing required field: sessionId' }, 400);
@@ -129,7 +191,31 @@ app.get('/session/stream', requireLLM(), async (c) => {
 // POST /api/analysis/prompt-quality
 // Body: { sessionId: string }
 // Runs prompt quality analysis on user messages in the session.
-app.post('/prompt-quality', requireLLM(), async (c) => {
+const promptQualityRoute = createRoute({
+  method: 'post',
+  path: '/prompt-quality',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AnalysisResultSchema } },
+      description: 'Prompt quality analysis completed successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured, or missing/invalid sessionId',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Session not found',
+    },
+    422: {
+      content: { 'application/json': { schema: AnalysisResultSchema } },
+      description: 'Analysis failed',
+    },
+  },
+});
+
+app.openapi(promptQualityRoute, async (c) => {
   const body = await c.req.json<{ sessionId?: string }>();
   if (!body.sessionId || typeof body.sessionId !== 'string') {
     return c.json({ error: 'Missing required field: sessionId' }, 400);
@@ -187,8 +273,27 @@ app.get('/prompt-quality/stream', requireLLM(), async (c) => {
 // POST /api/analysis/recurring
 // Body: { projectId?: string; limit?: number }
 // Finds recurring insight patterns across sessions.
-app.post('/recurring', requireLLM(), async (c) => {
+const recurringRoute = createRoute({
+  method: 'post',
+  path: '/recurring',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: RecurringInsightResultSchema } },
+      description: 'Recurring insight groups found',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured',
+    },
+    422: {
+      content: { 'application/json': { schema: RecurringInsightResultSchema } },
+      description: 'Recurring insight detection failed',
+    },
+  },
+});
 
+app.openapi(recurringRoute, async (c) => {
   const body = await c.req.json<{ projectId?: string; limit?: number }>();
   const db = getDb();
 
