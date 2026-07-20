@@ -1,46 +1,71 @@
+# Shared config between the dashboard service and the sync sidecar so both
+# see the same host session files / SQLite DB / API keys without repeating
+# the block twice and letting them drift apart.
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: code-insights:local
+  environment: &app-common-env
+    # os.homedir() resolves via $HOME on Linux, so pointing HOME at the
+    # mounted host home directory makes every provider (Claude Code, Cursor,
+    # Codex CLI, Copilot, Hermes, OpenCode, Vibe, ...) discover its real
+    # session files without per-provider path wiring.
+    HOME: /host-home
+    CODE_INSIGHTS_TELEMETRY_DISABLED: "${CODE_INSIGHTS_TELEMETRY_DISABLED:-}"
+    ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+    OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+    MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+  volumes:
+    # Whole-home mount: simplest way to cover every source-tool directory
+    # (~/.claude, ~/.cursor, ~/.codex, ~/.copilot, ~/.hermes, ~/.gemini,
+    # ~/.local/share/opencode, ~/.vibe) plus ~/.code-insights for the SQLite
+    # DB and config, in one line. Needs write access for data.db/config.json,
+    # so it isn't mounted read-only.
+    #
+    # Prefer a narrower blast radius? Replace this with individual mounts,
+    # e.g.:
+    #   - ${HOME}/.claude:/host-home/.claude
+    #   - ${HOME}/.cursor:/host-home/.cursor:ro
+    #   - ${HOME}/.codex:/host-home/.codex:ro
+    #   - ${HOME}/.code-insights:/host-home/.code-insights   (needs write)
+    - ${HOME}:/host-home
+  # Matches the mounted host directory's ownership so the app can write
+  # ~/.code-insights/data.db and config.json without EACCES. Requires a
+  # shell that exports UID/GID (bash does by default; run `export UID GID`
+  # first if your shell doesn't).
+  user: "${UID:-1000}:${GID:-1000}"
+  restart: unless-stopped
+
 services:
   code-insights:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: code-insights:local
+    <<: *app-common
     ports:
       - "${CODE_INSIGHTS_PORT:-7890}:7890"
-    environment:
-      # os.homedir() resolves via $HOME on Linux, so pointing HOME at the
-      # mounted host home directory makes every provider (Claude Code, Cursor,
-      # Codex CLI, Copilot, Hermes, OpenCode, Vibe, ...) discover its real
-      # session files without per-provider path wiring.
-      HOME: /host-home
-      CODE_INSIGHTS_TELEMETRY_DISABLED: "${CODE_INSIGHTS_TELEMETRY_DISABLED:-}"
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
-    volumes:
-      # Whole-home mount: simplest way to cover every source-tool directory
-      # (~/.claude, ~/.cursor, ~/.codex, ~/.copilot, ~/.hermes, ~/.gemini,
-      # ~/.local/share/opencode, ~/.vibe) plus ~/.code-insights for the SQLite
-      # DB and config, in one line. Needs write access for data.db/config.json,
-      # so it isn't mounted read-only.
-      #
-      # Prefer a narrower blast radius? Replace this with individual mounts,
-      # e.g.:
-      #   - ${HOME}/.claude:/host-home/.claude
-      #   - ${HOME}/.cursor:/host-home/.cursor:ro
-      #   - ${HOME}/.codex:/host-home/.codex:ro
-      #   - ${HOME}/.code-insights:/host-home/.code-insights   (needs write)
-      - ${HOME}:/host-home
-    # Matches the mounted host directory's ownership so the app can write
-    # ~/.code-insights/data.db and config.json without EACCES. Requires a
-    # shell that exports UID/GID (bash does by default; run `export UID GID`
-    # first if your shell doesn't).
-    user: "${UID:-1000}:${GID:-1000}"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:7890/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    restart: unless-stopped
+
+  # Periodic sync sidecar: the dashboard service auto-syncs once on its own
+  # startup but doesn't repeat sync while it's running, so a long-lived
+  # dashboard container would otherwise drift stale. This loops the CLI's
+  # own `sync -q` on a timer instead of adding a cron daemon to the image.
+  code-insights-sync:
+    <<: *app-common
+    environment:
+      <<: *app-common-env
+      CODE_INSIGHTS_SYNC_INTERVAL_SECONDS: "${CODE_INSIGHTS_SYNC_INTERVAL_SECONDS:-300}"
+    entrypoint: ["sh", "-c"]
+    # $$ escapes compose's own ${...} interpolation so the shell (not compose)
+    # resolves CODE_INSIGHTS_SYNC_INTERVAL_SECONDS from the container env set above.
+    command:
+      - |
+        while true; do
+          node dist/index.js sync -q
+          sleep "$$CODE_INSIGHTS_SYNC_INTERVAL_SECONDS"
+        done
