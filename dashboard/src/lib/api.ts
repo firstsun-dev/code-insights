@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home, PersonalitySnapshot, PersonalityWeekInfo, PersonalitySnapshotResponse, PersonalityWeeksResponse, CacheBySourceRow } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -176,6 +176,19 @@ export function fetchDailyStats(range: '7d' | '30d' | '90d' | 'all' = '7d', home
   const q = new URLSearchParams({ range });
   if (homeId) q.set('homeId', homeId);
   return request<{ range: string; daily: DailyStats[] }>(`/analytics/daily?${q}`);
+}
+
+export function fetchCacheBySource(
+  range: '7d' | '30d' | '90d' | 'all' = '7d',
+  homeId?: string,
+  source?: string
+) {
+  const q = new URLSearchParams({ range });
+  if (homeId) q.set('homeId', homeId);
+  if (source) q.set('source', source);
+  return request<{ range: string; homeId: string | undefined; source: string | undefined; rows: CacheBySourceRow[] }>(
+    `/analytics/cache-by-source?${q}`
+  );
 }
 
 // ── Analysis (Phase 4) ────────────────────────────────────────────────────────
@@ -575,5 +588,46 @@ export function generateDispatchImagePrompt(body: DispatchImagePromptRequest) {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ── Personality Analysis ──────────────────────────────────────────────────────
+
+export function fetchPersonalitySnapshot(params?: {
+  period?: string;
+  project?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.period) q.set('period', params.period);
+  if (params?.project) q.set('project', params.project);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request<PersonalitySnapshotResponse>(`/personality/snapshot${qs}`);
+}
+
+export function fetchPersonalityWeeks(params?: { project?: string }) {
+  const q = new URLSearchParams();
+  if (params?.project) q.set('project', params.project);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request<PersonalityWeeksResponse>(`/personality/weeks${qs}`);
+}
+
+export async function personalityGenerateStream(
+  params: {
+    period?: string;
+    project?: string;
+    source?: string;
+  },
+  signal?: AbortSignal
+): Promise<Response> {
+  const res = await fetch(`${BASE}/personality/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Personality generation failed ${res.status}: ${text}`);
+  }
+  return res;
 }
 

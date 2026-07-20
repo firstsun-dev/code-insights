@@ -4,6 +4,7 @@ import { useInsights } from '@/hooks/useInsights';
 import { useProjects } from '@/hooks/useProjects';
 import { ActivityChart } from '@/components/charts/ActivityChart';
 import { InsightTypeChart } from '@/components/charts/InsightTypeChart';
+import { CacheBySourceCard } from '@/components/dashboard/CacheBySourceCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorCard } from '@/components/ErrorCard';
@@ -303,6 +304,9 @@ export default function AnalyticsPage() {
 
       {/* Activity Over Time */}
       <ActivityChart data={dailyStats} />
+
+      {/* Cache Usage by Provider */}
+      <CacheBySourceCard range={range} homeId={homeId !== 'all' ? homeId : undefined} source={source !== 'all' ? source : undefined} />
 
       {/* Charts Row */}
       <div className="grid gap-6 md:grid-cols-2">
