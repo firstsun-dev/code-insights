@@ -5,15 +5,25 @@
  *   --native   Use claude -p (user's Claude subscription, zero config)
  *   (default)  Use configured LLM provider (OpenAI, Anthropic, Gemini, Ollama)
  *
- * Resume detection:
+ * Hook mode (--hook):
+ *   Reads { session_id, transcript_path, cwd } from stdin JSON,
+ *   calls syncSingleFile() to guarantee fresh data, then analyzes.
+ *
+ * Resume detection (hook mode only):
  *   Skips analysis if analysis_usage.session_message_count matches current
  *   sessions.message_count — the session has not changed since last analysis.
  *   Bypassed with --force.
  */
 
 import chalk from 'chalk';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { getDb } from '../db/client.js';
 import { ClaudeNativeRunner } from '../analysis/native-runner.js';
+import { CodexNativeRunner } from '../analysis/codex-runner.js';
+import { AntigravityNativeRunner } from '../analysis/antigravity-runner.js';
+import { MistralVibeRunner } from '../analysis/mistral-vibe-runner.js';
 import { ProviderRunner } from '../analysis/provider-runner.js';
 import {
   SHARED_ANALYST_SYSTEM_PROMPT,
@@ -22,6 +32,7 @@ import {
   buildCacheableConversationBlock,
 } from '../analysis/prompts.js';
 import { formatMessagesForAnalysis } from '../analysis/message-format.js';
+import { detectRageLoopHeuristic } from '../analysis/loop-detector.js';
 import { parseAnalysisResponse, parsePromptQualityResponse } from '../analysis/response-parsers.js';
 import {
   saveInsightsToDb,
@@ -29,11 +40,30 @@ import {
   saveFacetsToDb,
   convertToInsightRows,
   convertPQToInsightRow,
-  applyGeneratedTitle,
+  updateSessionTitle,
 } from '../analysis/analysis-db.js';
 import { saveAnalysisUsage } from '../analysis/analysis-usage-db.js';
 import type { AnalysisRunner } from '../analysis/runner-types.js';
 import type { SQLiteMessageRow } from '../analysis/prompt-types.js';
+
+// ── Schema loading ────────────────────────────────────────────────────────────
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Helper to safely load schema files from the same relative location in src or dist
+function loadSchema(filename: string): object | undefined {
+  try {
+    const path = join(__dirname, '..', 'analysis', 'schemas', filename);
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (err) {
+    // Silently fail if schema is missing; runners will fall back to text-only prompts
+    return undefined;
+  }
+}
+
+const SESSION_ANALYSIS_SCHEMA = loadSchema('session-analysis.json');
+const PROMPT_QUALITY_SCHEMA = loadSchema('prompt-quality.json');
 
 // ── DB types ──────────────────────────────────────────────────────────────────
 
@@ -90,21 +120,19 @@ function isAlreadyAnalyzed(sessionId: string, currentMessageCount: number): bool
 export interface InsightsCommandOptions {
   sessionId: string;
   native: boolean;
+  codex?: boolean;
+  antigravity?: boolean;
+  vibe?: boolean;
+  hookMode?: boolean;
   force?: boolean;
   quiet?: boolean;
   source?: string;
-  model?: string;
   /** Pre-built runner to reuse across batch calls. Skips runner construction and validate(). */
   _runner?: AnalysisRunner;
 }
 
 // ── Core logic ────────────────────────────────────────────────────────────────
 
-/**
- * Run analysis on a session. Called by the CLI command and tests.
- *
- * @throws if session not found or LLM is not configured / not available
- */
 export async function runInsightsCommand(options: InsightsCommandOptions): Promise<void> {
   const log = options.quiet ? () => {} : console.log.bind(console);
 
@@ -112,12 +140,78 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
   let runner: AnalysisRunner;
   if (options._runner) {
     runner = options._runner;
+  } else if (options.vibe) {
+    MistralVibeRunner.validate();
+    runner = new MistralVibeRunner();
+  } else if (options.antigravity) {
+    AntigravityNativeRunner.validate();
+    runner = new AntigravityNativeRunner();
+  } else if (options.codex) {
+    CodexNativeRunner.validate();
+    runner = new CodexNativeRunner();
   } else if (options.native) {
-    ClaudeNativeRunner.validate();
-    runner = new ClaudeNativeRunner({ model: options.model });
+    // Default native is now Codex, falling back to Claude
+    try {
+      CodexNativeRunner.validate();
+      runner = new CodexNativeRunner();
+    } catch {
+      try {
+        ClaudeNativeRunner.validate();
+        runner = new ClaudeNativeRunner();
+      } catch (err) {
+        throw new Error(`No native runners found. --native requires either Codex or Claude Code to be installed.`);
+      }
+    }
   } else {
     runner = ProviderRunner.fromConfig();
   }
+
+  // Helper to run analysis with multi-level fallback (Codex -> Claude -> Antigravity -> Vibe)
+  const performAnalysis = async (params: { systemPrompt: string; userPrompt: string; jsonSchema?: object }) => {
+    try {
+      return await runner.runAnalysis(params);
+    } catch (err: any) {
+      // If using general 'native' mode (not forced to a specific runner)
+      if (options.native && !options.codex && !options.antigravity && !options.vibe) {
+        // Fallback 1: Codex -> Claude
+        if (runner.name === 'codex-native' && err.message.includes('usage limit reached')) {
+          log(chalk.yellow(`[Code Insights] Codex usage limit reached, falling back to Claude...`));
+          try {
+            ClaudeNativeRunner.validate();
+            const fallbackRunner = new ClaudeNativeRunner();
+            return await fallbackRunner.runAnalysis(params);
+          } catch (fallbackErr: any) {
+            log(chalk.yellow(`[Code Insights] Fallback to Claude failed: ${fallbackErr.message}. Trying Antigravity...`));
+            // Fall through to next fallback
+          }
+        }
+
+        // Fallback 2: (Codex OR Claude) -> Antigravity
+        if (runner.name === 'codex-native' || runner.name === 'claude-code-native') {
+          try {
+            AntigravityNativeRunner.validate();
+            const fallbackRunner = new AntigravityNativeRunner();
+            return await fallbackRunner.runAnalysis(params);
+          } catch (fallbackErr: any) {
+            log(chalk.yellow(`[Code Insights] Fallback to Antigravity failed: ${fallbackErr.message}. Trying Mistral Vibe...`));
+            // Fall through to next fallback
+          }
+        }
+
+        // Fallback 3: (Codex OR Claude OR Antigravity) -> Vibe
+        if (runner.name === 'codex-native' || runner.name === 'claude-code-native' || runner.name === 'antigravity-native') {
+          try {
+            MistralVibeRunner.validate();
+            const fallbackRunner = new MistralVibeRunner();
+            return await fallbackRunner.runAnalysis(params);
+          } catch (fallbackErr: any) {
+            throw new Error(`Fallback system exhausted. Original error: ${err.message}. Last fallback error: ${fallbackErr.message}`);
+          }
+        }
+      }
+      throw err;
+    }
+  };
 
   // 2. Load session from DB
   const session = loadSessionForAnalysis(options.sessionId);
@@ -134,8 +228,8 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
     slash_commands: session.slash_commands ?? undefined,
   };
 
-  // 3. Resume detection (skipped when --force)
-  if (!options.force) {
+  // 3. Resume detection — hook mode only (skipped when --force)
+  if (options.hookMode && !options.force) {
     if (isAlreadyAnalyzed(options.sessionId, session.message_count)) {
       return; // already analyzed at this session length
     }
@@ -146,6 +240,9 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
 
   // 5. Build shared conversation block (same for both passes)
   const formattedMessages = formatMessagesForAnalysis(messages);
+
+  // 6. Heuristic loop detection
+  const loopSignal = detectRageLoopHeuristic(messages);
 
   // Session metadata for prompt builders
   const slashCommands = (() => {
@@ -170,12 +267,14 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
     session.project_name,
     session.summary,
     sessionMeta,
+    loopSignal,
   );
   const sessionUserPrompt = `${buildCacheableConversationBlock(formattedMessages).text}\n${sessionInstructions}`;
 
-  const sessionResult = await runner.runAnalysis({
+  const sessionResult = await performAnalysis({
     systemPrompt: SHARED_ANALYST_SYSTEM_PROMPT,
     userPrompt: sessionUserPrompt,
+    jsonSchema: SESSION_ANALYSIS_SCHEMA,
   });
 
   const parsedSession = parseAnalysisResponse(sessionResult.rawJson);
@@ -186,7 +285,6 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
   // Save session insights (upsert: insert new, delete old)
   const sessionInsights = convertToInsightRows(parsedSession.data, sessionData);
   saveInsightsToDb(sessionInsights);
-  applyGeneratedTitle(session.id, sessionInsights);
   deleteSessionInsights(session.id, {
     excludeTypes: ['prompt_quality'],
     excludeIds: sessionInsights.map(i => i.id),
@@ -194,6 +292,11 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
 
   if (parsedSession.data.facets) {
     saveFacetsToDb(session.id, parsedSession.data.facets);
+  }
+
+  // Auto-apply generated title to the session record
+  if (parsedSession.data.summary?.title) {
+    updateSessionTitle(session.id, parsedSession.data.summary.title);
   }
 
   saveAnalysisUsage({
@@ -219,9 +322,10 @@ export async function runInsightsCommand(options: InsightsCommandOptions): Promi
   );
   const pqUserPrompt = `${buildCacheableConversationBlock(formattedMessages).text}\n${pqInstructions}`;
 
-  const pqResult = await runner.runAnalysis({
+  const pqResult = await performAnalysis({
     systemPrompt: SHARED_ANALYST_SYSTEM_PROMPT,
     userPrompt: pqUserPrompt,
+    jsonSchema: PROMPT_QUALITY_SCHEMA,
   });
 
   const parsedPQ = parsePromptQualityResponse(pqResult.rawJson);
@@ -264,35 +368,74 @@ export async function insightsCommand(
   sessionId: string | undefined,
   opts: {
     native?: boolean;
+    codex?: boolean;
+    antigravity?: boolean;
+    vibe?: boolean;
     hook?: boolean;
     source?: string;
     force?: boolean;
     quiet?: boolean;
-    model?: string;
+    all?: boolean;
   }
 ): Promise<void> {
   const quiet = opts.quiet ?? false;
+  const log = quiet ? () => {} : console.log.bind(console);
 
   try {
-    if (opts.hook) {
-      // --hook was removed in v4.9. Show a clear error so users know what to do.
-      console.error(chalk.red(
-        'The --hook flag has been removed. Run `code-insights install-hook` to install the updated hook.'
-      ));
-      process.exit(1);
+    // --all: analyze all unanalyzed sessions
+    if (opts.all) {
+      await insightsCheckCommand({
+        days: 30,
+        quiet,
+        analyze: true,
+        native: opts.native,
+        codex: opts.codex,
+        antigravity: opts.antigravity,
+        vibe: opts.vibe,
+      });
+      return;
     }
 
-    if (!sessionId) {
-      throw new Error('Session ID is required');
+    let resolvedSessionId: string;
+
+    if (opts.hook) {
+      // Hook mode: read { session_id, transcript_path, cwd } from stdin
+      const stdinData = await readStdin();
+      let parsed: { session_id?: string; transcript_path?: string; cwd?: string };
+      try {
+        parsed = JSON.parse(stdinData);
+      } catch {
+        throw new Error('--hook mode requires valid JSON on stdin (got: ' + stdinData.slice(0, 100) + ')');
+      }
+
+      if (!parsed.session_id) {
+        throw new Error('--hook stdin JSON missing required field: session_id');
+      }
+
+      resolvedSessionId = parsed.session_id;
+
+      // Sync the single file before analysis
+      if (parsed.transcript_path) {
+        const { syncSingleFile } = await import('./sync.js');
+        await syncSingleFile({ filePath: parsed.transcript_path, sourceTool: opts.source, quiet });
+      }
+    } else {
+      if (!sessionId) {
+        throw new Error('Session ID is required (or use --hook to read from stdin)');
+      }
+      resolvedSessionId = sessionId;
     }
 
     await runInsightsCommand({
-      sessionId,
+      sessionId: resolvedSessionId,
       native: opts.native ?? false,
+      codex: opts.codex ?? false,
+      antigravity: opts.antigravity ?? false,
+      vibe: opts.vibe ?? false,
+      hookMode: opts.hook ?? false,
       force: opts.force ?? false,
       quiet,
       source: opts.source,
-      model: opts.model,
     });
   } catch (error) {
     if (!quiet) {
@@ -311,6 +454,10 @@ export async function insightsCheckCommand(opts: {
   days?: number;
   quiet?: boolean;
   analyze?: boolean;
+  native?: boolean;
+  codex?: boolean;
+  antigravity?: boolean;
+  vibe?: boolean;
 }): Promise<void> {
   const days = opts.days ?? 7;
   const quiet = opts.quiet ?? false;
@@ -344,42 +491,158 @@ export async function insightsCheckCommand(opts: {
     }
 
     // --analyze: process all found sessions with progress output
-    if (analyze) {
-      const runner = ProviderRunner.fromConfig();
-      let successCount = 0;
+    if (analyze || count <= 2) {
+      let runner: AnalysisRunner | undefined;
+      type RunnerType = 'claude' | 'codex' | 'antigravity' | 'vibe' | 'provider';
 
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const label = row.custom_title ?? row.generated_title ?? row.id;
-        const position = `[${i + 1}/${count}]`;
-        process.stdout.write(`${position} ${label} ... `);
-        const start = Date.now();
+      const initializeRunner = (type: RunnerType): AnalysisRunner | undefined => {
         try {
-          await runInsightsCommand({ sessionId: row.id, native: false, quiet: true, _runner: runner });
-          const elapsed = Math.round((Date.now() - start) / 1000);
-          process.stdout.write(`done (${elapsed}s)\n`);
-          successCount++;
+          if (type === 'antigravity') {
+            AntigravityNativeRunner.validate();
+            return new AntigravityNativeRunner();
+          } else if (type === 'codex') {
+            CodexNativeRunner.validate();
+            return new CodexNativeRunner();
+          } else if (type === 'claude') {
+            ClaudeNativeRunner.validate();
+            return new ClaudeNativeRunner();
+          } else if (type === 'vibe') {
+            MistralVibeRunner.validate();
+            return new MistralVibeRunner();
+          } else {
+            try {
+              return ProviderRunner.fromConfig();
+            } catch (err) {
+              log(chalk.yellow(`[Code Insights] provider runner not available: ${err instanceof Error ? err.message : String(err)}`));
+              return undefined;
+            }
+          }
         } catch (err) {
-          process.stdout.write('failed\n');
-          console.error(chalk.red(`  [Code Insights] ${err instanceof Error ? err.message : 'Analysis failed'}`));
+          log(chalk.yellow(`[Code Insights] ${type} runner not available: ${err instanceof Error ? err.message : String(err)}`));
+          return undefined;
         }
+      };
+
+      if (analyze) {
+        // Determine initial runner type
+        let currentRunnerType: RunnerType;
+        if (opts.antigravity) {
+          currentRunnerType = 'antigravity';
+        } else if (opts.codex) {
+          currentRunnerType = 'codex';
+        } else if (opts.vibe) {
+          currentRunnerType = 'vibe';
+        } else if (opts.native) {
+          currentRunnerType = 'claude';
+        } else {
+          currentRunnerType = 'provider';
+        }
+
+        runner = initializeRunner(currentRunnerType);
+
+        // Fallback logic for native modes: Claude -> Codex -> Antigravity -> Vibe
+        if (!runner && (opts.native || opts.codex || opts.antigravity || opts.vibe)) {
+          // If we started with claude or provider (as default for --native), try Codex
+          if (currentRunnerType === 'claude' || (opts.native && !opts.codex && !opts.antigravity && !opts.vibe)) {
+            log(chalk.yellow(`[Code Insights] Falling back to Codex...`));
+            currentRunnerType = 'codex';
+            runner = initializeRunner('codex');
+          }
+          // If we still have no runner and were trying codex (or just started there), try Antigravity
+          if (!runner && currentRunnerType === 'codex') {
+            log(chalk.yellow(`[Code Insights] Falling back to Antigravity...`));
+            currentRunnerType = 'antigravity';
+            runner = initializeRunner('antigravity');
+          }
+          // If we still have no runner and were trying antigravity, try Vibe
+          if (!runner && currentRunnerType === 'antigravity') {
+            log(chalk.yellow(`[Code Insights] Falling back to Mistral Vibe...`));
+            currentRunnerType = 'vibe';
+            runner = initializeRunner('vibe');
+          }
+        }
+
+        if (!runner) {
+          throw new Error(`No runners could be initialized. Please check your configuration or tool availability.`);
+        }
+
+        let successCount = 0;
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const label = row.custom_title ?? row.generated_title ?? row.id;
+          const position = `[${i + 1}/${count}]`;
+          process.stdout.write(`${position} ${label} ... `);
+          const start = Date.now();
+          try {
+            await runInsightsCommand({ 
+              sessionId: row.id, 
+              native: currentRunnerType === 'claude', 
+              codex: currentRunnerType === 'codex', 
+              antigravity: currentRunnerType === 'antigravity',
+              vibe: currentRunnerType === 'vibe',
+              quiet: true, 
+              _runner: runner 
+            });
+            const elapsed = Math.round((Date.now() - start) / 1000);
+            process.stdout.write(`done (${elapsed}s)\n`);
+            successCount++;
+          } catch (err: any) {
+            process.stdout.write('failed\n');
+            console.error(chalk.red(`  [Code Insights] ${err instanceof Error ? err.message : 'Analysis failed'}`));
+          }
+        }
+
+        log(chalk.green(`Analyzed ${successCount} session${successCount !== 1 ? 's' : ''}.`));
+        return;
       }
 
-      log(chalk.green(`Analyzed ${successCount} session${successCount !== 1 ? 's' : ''}.`));
-      return;
-    }
+      // Auto-analyze silently when 1-2 unanalyzed sessions
+      if (count <= 2) {
+        let runnerType: RunnerType;
+        if (opts.antigravity) runnerType = 'antigravity';
+        else if (opts.codex) runnerType = 'codex';
+        else if (opts.vibe) runnerType = 'vibe';
+        else if (opts.native) runnerType = 'claude';
+        else runnerType = 'provider';
 
-    // Auto-analyze silently when 1-2 unanalyzed sessions
-    if (count <= 2) {
-      const runner = ProviderRunner.fromConfig();
-      for (const row of rows) {
-        try {
-          await runInsightsCommand({ sessionId: row.id, native: false, quiet: true, _runner: runner });
-        } catch {
-          // Silently ignore auto-analyze errors for 1-2 sessions
+        runner = initializeRunner(runnerType);
+        
+        // Fallback for auto-analyze
+        if (!runner && (opts.native || opts.codex || opts.antigravity || opts.vibe)) {
+          if (runnerType === 'claude' || (opts.native && !opts.codex && !opts.antigravity && !opts.vibe)) {
+            runnerType = 'codex';
+            runner = initializeRunner('codex');
+          }
+          if (!runner && runnerType === 'codex') {
+            runnerType = 'antigravity';
+            runner = initializeRunner('antigravity');
+          }
+          if (!runner && runnerType === 'antigravity') {
+            runnerType = 'vibe';
+            runner = initializeRunner('vibe');
+          }
+        }
+
+        if (runner) {
+          for (const row of rows) {
+            try {
+              await runInsightsCommand({ 
+                sessionId: row.id, 
+                native: runnerType === 'claude',
+                codex: runnerType === 'codex',
+                antigravity: runnerType === 'antigravity',
+                vibe: runnerType === 'vibe',
+                quiet: true,
+                _runner: runner
+              });
+            } catch {
+              // Silently ignore auto-analyze errors for 1-2 sessions
+            }
+          }
+          return;
         }
       }
-      return;
     }
 
     // 3-10: print count + suggestion
@@ -404,3 +667,18 @@ export async function insightsCheckCommand(opts: {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (process.stdin.isTTY) {
+      resolve('{}');
+      return;
+    }
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', chunk => { data += chunk; });
+    process.stdin.on('end', () => resolve(data.trim()));
+    process.stdin.on('error', reject);
+  });
+}

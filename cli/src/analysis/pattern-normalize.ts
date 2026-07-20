@@ -85,7 +85,7 @@ const PATTERN_ALIASES: Record<string, string> = {
  * 3. Substring match (category contains canonical or vice versa) → return canonical
  * 4. No match → return original (novel category)
  */
-export function normalizePatternCategory(category: string): string {
+export function normalizePatternCategory(category: string | null | undefined): string {
   return normalizeCategory(category, {
     canonicalCategories: CANONICAL_PATTERN_CATEGORIES,
     aliases: PATTERN_ALIASES,

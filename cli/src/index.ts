@@ -14,8 +14,10 @@ import { configCommand } from './commands/config.js';
 import { telemetryCommand } from './commands/telemetry.js';
 import { reflectCommand } from './commands/reflect.js';
 import { insightsCommand, insightsCheckCommand } from './commands/insights.js';
-import { sessionEndCommand } from './commands/session-end.js';
+import { buildOptimizeCommand } from './commands/optimize.js';
 import { buildQueueCommand } from './commands/queue.js';
+import { buildEmbeddingsCommand } from './commands/embeddings.js';
+import { sessionEndCommand } from './commands/session-end.js';
 import { doctorCommand } from './commands/doctor/index.js';
 import { showTelemetryNoticeIfNeeded } from './utils/telemetry.js';
 
@@ -129,32 +131,44 @@ program.addCommand(statsCommand);
 program.addCommand(configCommand);
 program.addCommand(telemetryCommand);
 program.addCommand(reflectCommand);
+program.addCommand(buildQueueCommand());
+program.addCommand(buildEmbeddingsCommand());
+program.addCommand(buildOptimizeCommand());
 
-
-// session-end command — single SessionEnd hook entry point (sync + enqueue + spawn worker)
 program
   .command('session-end')
-  .description('SessionEnd hook: sync session, enqueue for analysis, spawn background worker')
-  .option('--native', 'Use claude -p for analysis worker (default: true)')
+  .description('Internal: Claude Code SessionEnd hook entry point')
+  .option('--no-native', 'Use configured provider instead of claude -p')
+  .option('--codex', 'Use codex exec fallback')
+  .option('--antigravity', 'Use antigravity -p fallback')
+  .option('--vibe', 'Use vibe CLI fallback')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('-q, --quiet', 'Suppress output')
-  .option('--model <model>', 'Model for native analysis (default: sonnet)')
   .action(async (opts) => {
-    await sessionEndCommand({ native: opts.native ?? true, quiet: opts.quiet, source: opts.source, model: opts.model });
+    await sessionEndCommand({ 
+      native: opts.native, 
+      codex: opts.codex, 
+      antigravity: opts.antigravity,
+      vibe: opts.vibe,
+      source: opts.source, 
+      quiet: opts.quiet 
+    });
   });
 
-// queue command suite — manage the analysis_queue
-program.addCommand(buildQueueCommand());
 
 // insights command — analyze a session using native claude -p or configured LLM
 const insightsCmd = program
   .command('insights [session_id]')
   .description('Analyze a session with AI — extracts insights and prompt quality score')
   .option('--native', 'Use claude -p (your Claude subscription, no API key required)')
+  .option('--codex', 'Use codex exec (OpenAI Codex, no API key required)')
+  .option('--antigravity', 'Use antigravity -p (Google Antigravity CLI, no API key required)')
+  .option('--vibe', 'Use vibe CLI (Mistral Vibe, no API key required)')
   .option('--hook', 'Read session context from stdin (for Claude Code SessionEnd hook)')
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('--force', 'Re-analyze even if already analyzed at this session length')
   .option('-q, --quiet', 'Suppress output')
+  .option('--all', 'Analyze all unanalyzed sessions in the last 30 days')
   .option('--model <model>', 'Model for native analysis (default: sonnet)')
   .action(async (sessionId: string | undefined, opts) => {
     await insightsCommand(sessionId, opts);
@@ -166,11 +180,20 @@ insightsCmd
   .option('--days <n>', 'Lookback window in days', '7')
   .option('-q, --quiet', 'Machine-readable output (just count)')
   .option('--analyze', 'Process all found sessions sequentially')
-  .action(async (opts) => {
+  .option('--native', 'Use native runner (claude -p) for batch analysis')
+  .option('--codex', 'Use codex exec for batch analysis')
+  .option('--antigravity', 'Use antigravity -p for batch analysis')
+  .option('--vibe', 'Use vibe CLI for batch analysis')
+  .action(async (opts, cmd) => {
+    const parentOpts = cmd.parent?.opts() || {};
     await insightsCheckCommand({
       days: opts.days ? parseInt(opts.days, 10) : 7,
-      quiet: opts.quiet,
+      quiet: opts.quiet ?? parentOpts.quiet,
       analyze: opts.analyze,
+      native: opts.native ?? parentOpts.native,
+      codex: opts.codex ?? parentOpts.codex,
+      antigravity: opts.antigravity ?? parentOpts.antigravity,
+      vibe: opts.vibe ?? parentOpts.vibe,
     });
   });
 

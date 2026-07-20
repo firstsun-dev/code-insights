@@ -47,8 +47,15 @@ export function saveConfig(config: ClaudeInsightConfig): void {
   if (config.dashboard !== undefined) {
     clean.dashboard = {
       ...(config.dashboard.port !== undefined ? { port: config.dashboard.port } : {}),
-      ...(config.dashboard.llm !== undefined ? { llm: config.dashboard.llm } : {}),
     };
+    // Persist LLM config including apiKey — users can set once and reuse
+    if (config.dashboard.llm !== undefined) {
+      clean.dashboard.llm = { ...config.dashboard.llm };
+    }
+    // Preserve dashboard.analysis sub-object (retrieval config, etc.)
+    if (config.dashboard?.analysis) {
+      clean.dashboard.analysis = { ...config.dashboard.analysis };
+    }
   }
   if (config.telemetry !== undefined) {
     clean.telemetry = config.telemetry;
@@ -84,6 +91,63 @@ export function saveSyncState(state: SyncState): void {
  */
 export function getClaudeDir(): string {
   return path.join(os.homedir(), '.claude', 'projects');
+}
+
+/**
+ * Get Gemini CLI home directory
+ */
+export function getGeminiHomeDir(): string {
+  return path.join(os.homedir(), '.gemini');
+}
+
+/**
+ * Get Gemini CLI temporary directory (where sessions are stored)
+ */
+export function getGeminiTmpDir(): string {
+  return path.join(getGeminiHomeDir(), 'tmp');
+}
+
+/**
+ * Get Hermes Agent home directory
+ */
+export function getHermesHomeDir(): string {
+  return path.join(os.homedir(), '.hermes');
+}
+
+/**
+ * Get OpenCode storage directory
+ */
+export function getOpenCodeDir(): string {
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    return path.join(home, '.local', 'share', 'opencode'); // Default fallback for Windows if not in AppData
+  }
+  return path.join(home, '.local', 'share', 'opencode');
+}
+
+/**
+ * Get Kilo storage directory
+ */
+export function getKiloDir(): string {
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    return path.join(home, '.local', 'share', 'kilo'); // Default fallback for Windows if not in AppData
+  }
+  return path.join(home, '.local', 'share', 'kilo');
+}
+
+/**
+ * Get Mistral Vibe home directory
+ */
+export function getVibeHomeDir(): string {
+  return process.env.VIBE_HOME || path.join(os.homedir(), '.vibe');
+}
+
+/**
+ * Get Mistral Vibe logs directory
+ */
+export function getVibeLogsDir(): string {
+  return path.join(getVibeHomeDir(), 'logs', 'session');
 }
 
 /**

@@ -49,3 +49,22 @@ coverage/
 
 # Git worktrees
 .worktrees/
+
+.playwright-mcp/
+
+*.code-workspace
+
+.codemap/
+
+node-compile-cache/
+
+
+.ck/
+.ckignore
+
+**/graphify-out/cache/*
+**/graphify-out/manifest.json
+**/graphify-out/cost.json
+.graphifyignore
+
+tea_debug.log

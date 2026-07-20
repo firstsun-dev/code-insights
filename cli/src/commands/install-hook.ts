@@ -1,55 +1,85 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 import chalk from 'chalk';
 import { trackEvent, captureError, classifyError } from '../utils/telemetry.js';
-import {
-  HOOKS_FILE,
-  CLI_ENTRY,
-  type ClaudeSettings,
-  type HookConfig,
-  getHookCommand,
-  hookAlreadyInstalled,
-} from '../utils/hooks-utils.js';
 
 const CLAUDE_SETTINGS_DIR = path.join(os.homedir(), '.claude');
+const HOOKS_FILE = path.join(CLAUDE_SETTINGS_DIR, 'settings.json');
 
-/**
- * Remove any existing Code Insights Stop hooks (v4.8.x migration).
- * v4.8.x installed a Stop hook for sync; v4.9+ uses a single SessionEnd hook.
- * Called on install so re-running install-hook cleans up the old setup.
- */
-function removeStopHooks(settings: ClaudeSettings): boolean {
-  if (!settings.hooks?.Stop) return false;
-  const before = settings.hooks.Stop.length;
-  settings.hooks.Stop = settings.hooks.Stop.filter(
-    (h) => !h.hooks.some((hook) => getHookCommand(hook).includes('code-insights'))
+// Stable path to the CLI entry point — works across npm link, global install, and npx.
+// process.argv[1] is unstable (npx uses a cache path that changes per invocation).
+const CLI_ENTRY = path.resolve(fileURLToPath(import.meta.url), '../../index.js');
+
+interface ClaudeSettings {
+  hooks?: {
+    PostToolUse?: HookConfig[];
+    Stop?: HookConfig[];
+    SessionEnd?: HookConfig[];
+    [key: string]: HookConfig[] | undefined;
+  };
+  [key: string]: unknown;
+}
+
+interface HookConfig {
+  matcher?: string;
+  hooks: Array<string | { type: string; command?: string; url?: string; timeout?: number }>;
+}
+
+export interface InstallHookOptions {
+  syncOnly?: boolean;
+  analysisOnly?: boolean;
+}
+
+/** Extract command string from both old (string) and new ({type, command}) hook formats */
+function getHookCommand(hook: string | { type: string; command?: string; url?: string } | null | undefined): string {
+  if (!hook) return '';
+  if (typeof hook === 'string') return hook;
+  return hook.command || '';
+}
+
+/** Check if a hook array already contains a code-insights hook */
+function hookAlreadyInstalled(hookList: HookConfig[]): boolean {
+  return hookList.some(
+    (h) => h.hooks.some((hook) => getHookCommand(hook).includes('code-insights'))
   );
-  if (settings.hooks.Stop.length === 0) {
-    delete settings.hooks.Stop;
-  }
-  return settings.hooks.Stop === undefined
-    ? before > 0
-    : settings.hooks.Stop.length < before;
 }
 
 /**
- * Install the single Code Insights SessionEnd hook.
+ * Install Claude Code hooks for auto-sync and native session analysis.
  *
- * v4.9+ uses one SessionEnd hook that does sync + enqueue + worker spawn.
- * Running install-hook again removes the old Stop hook (v4.8.x hygiene) and
- * installs a fresh session-end hook.
+ * By default installs both the Stop (sync) and SessionEnd (analysis) hooks.
+ * Use --sync-only or --analysis-only for granular control.
  */
-export async function installHookCommand(): Promise<void> {
-  console.log(chalk.cyan('\nInstall Code Insights Hook\n'));
+export async function installHookCommand(options: InstallHookOptions = {}): Promise<void> {
+  const { syncOnly = false, analysisOnly = false } = options;
 
-  const sessionEndCommand = `node ${CLI_ENTRY} session-end --native -q`;
+  if (syncOnly && analysisOnly) {
+    console.log(chalk.red('Cannot use --sync-only and --analysis-only together. Use neither flag to install both hooks.'));
+    return;
+  }
 
-  console.log(chalk.gray('This will add one Claude Code SessionEnd hook:\n'));
-  console.log(chalk.white('  SessionEnd hook — Syncs and analyzes sessions when they end'));
-  console.log(chalk.gray('                    Uses your Claude subscription. No API key needed.\n'));
+  const installSync = !analysisOnly;
+  const installAnalysis = !syncOnly;
+
+  console.log(chalk.cyan('\nInstall Code Insights Hooks\n'));
 
   try {
+    const syncCommand = `node ${CLI_ENTRY} sync -q`;
+    const analysisCommand = `node ${CLI_ENTRY} insights --hook --native -q`;
+
+    if (!syncOnly && !analysisOnly) {
+      console.log(chalk.gray('This will add two Claude Code hooks:\n'));
+      console.log(chalk.white('  Stop hook         — Syncs sessions after each response'));
+      console.log(chalk.white('  SessionEnd hook   — Analyzes sessions using your Claude subscription'));
+      console.log(chalk.gray('                      No API key needed. (~15-30s per session)\n'));
+    } else if (syncOnly) {
+      console.log(chalk.gray(`This will add a Stop hook: ${syncCommand}\n`));
+    } else {
+      console.log(chalk.gray(`This will add a SessionEnd hook: ${analysisCommand}\n`));
+    }
+
     // Load existing settings
     let settings: ClaudeSettings = {};
     if (fs.existsSync(HOOKS_FILE)) {
@@ -65,41 +95,66 @@ export async function installHookCommand(): Promise<void> {
       settings.hooks = {};
     }
 
-    // Clean up v4.8.x Stop hook if present (sync hook from old two-hook system).
-    const removedStop = removeStopHooks(settings);
-    if (removedStop) {
-      console.log(chalk.dim('  Removed legacy Stop hook from v4.8.x'));
+    let syncInstalled = false;
+    let analysisInstalled = false;
+
+    // Install Stop hook (sync)
+    if (installSync) {
+      const existingStopHooks = settings.hooks.Stop || [];
+      if (!hookAlreadyInstalled(existingStopHooks)) {
+        const stopHook: HookConfig = {
+          hooks: [{ type: 'command', command: syncCommand }],
+        };
+        settings.hooks.Stop = [...existingStopHooks, stopHook];
+        syncInstalled = true;
+      }
     }
 
-    // Install the new unified SessionEnd hook (skip if already installed)
-    if (!settings.hooks.SessionEnd) {
-      settings.hooks.SessionEnd = [];
+    // Install SessionEnd hook (analysis)
+    if (installAnalysis) {
+      const existingSessionEndHooks = settings.hooks.SessionEnd || [];
+      if (!hookAlreadyInstalled(existingSessionEndHooks)) {
+        const sessionEndHook: HookConfig = {
+          hooks: [{ type: 'command', command: analysisCommand, timeout: 300000 }],
+        };
+        settings.hooks.SessionEnd = [...existingSessionEndHooks, sessionEndHook];
+        analysisInstalled = true;
+      }
     }
 
-    if (!hookAlreadyInstalled(settings.hooks.SessionEnd)) {
-      const newHook: HookConfig = {
-        // timeout: 10s is enough — session-end exits immediately after spawn
-        hooks: [{ type: 'command', command: sessionEndCommand, timeout: 10000 }],
-      };
-      settings.hooks.SessionEnd.push(newHook);
+    if (!syncInstalled && !analysisInstalled) {
+      // Both requested hooks were already present — show a single consolidated message
+      const label = installSync && installAnalysis ? 'sync + analysis' : installSync ? 'sync' : 'analysis';
+      console.log(chalk.yellow(`Code Insights hooks already installed (${label}).`));
+      console.log(chalk.gray('To reinstall, first run `code-insights uninstall-hook`'));
+      return;
     }
 
     // Write settings
     fs.mkdirSync(CLAUDE_SETTINGS_DIR, { recursive: true });
     fs.writeFileSync(HOOKS_FILE, JSON.stringify(settings, null, 2));
 
+    const installedTypes: string[] = [];
+    if (syncInstalled) installedTypes.push('sync');
+    if (analysisInstalled) installedTypes.push('analysis');
+
     console.log(chalk.green('Hook installed successfully!'));
     console.log(chalk.gray(`\nConfiguration saved to: ${HOOKS_FILE}`));
-    console.log(chalk.cyan('\nHow it works:'));
-    console.log(chalk.white('  When a session ends, Code Insights syncs it and queues it for analysis.'));
-    console.log(chalk.white('  Analysis runs in the background — no delay when you end a session.'));
-    console.log(chalk.dim('\n  Check queue status: code-insights queue status'));
+
+    if (!analysisOnly) {
+      console.log(chalk.cyan('\nHow it works:'));
+      console.log(chalk.white('  Stop hook: sessions are synced after each Claude response'));
+    }
+    if (!syncOnly) {
+      console.log(chalk.white('  SessionEnd hook: sessions are analyzed when a session ends'));
+      console.log(chalk.white('  No API key needed — uses your Claude Code subscription'));
+    }
 
     trackEvent('cli_install_hook', {
       success: true,
-      hook_types: 'session-end',
-      sync_installed: false,
-      analysis_installed: true,
+      hook_types: installedTypes.join(','),
+      sync_installed: syncInstalled,
+      analysis_installed: analysisInstalled,
     });
   } catch (error) {
     console.log(chalk.red(`Failed to install hook: ${error instanceof Error ? error.message : 'Unknown error'}`));
@@ -110,8 +165,7 @@ export async function installHookCommand(): Promise<void> {
 }
 
 /**
- * Uninstall Code Insights hooks.
- * Handles both v4.9+ (SessionEnd session-end) and v4.8.x (Stop sync + SessionEnd insights --hook).
+ * Uninstall Claude Code hooks — removes both Stop (sync) and SessionEnd (analysis) hooks.
  */
 export async function uninstallHookCommand(): Promise<void> {
   console.log(chalk.cyan('\nUninstall Code Insights Hooks\n'));
@@ -130,7 +184,7 @@ export async function uninstallHookCommand(): Promise<void> {
       return;
     }
 
-    // Remove all Code Insights hooks (Stop and SessionEnd, any command format)
+    // Filter out Code Insights Stop hooks
     if (settings.hooks.Stop) {
       settings.hooks.Stop = settings.hooks.Stop.filter(
         (h) => !h.hooks.some((hook) => getHookCommand(hook).includes('code-insights'))
@@ -140,6 +194,7 @@ export async function uninstallHookCommand(): Promise<void> {
       }
     }
 
+    // Filter out Code Insights SessionEnd hooks
     if (settings.hooks.SessionEnd) {
       settings.hooks.SessionEnd = settings.hooks.SessionEnd.filter(
         (h) => !h.hooks.some((hook) => getHookCommand(hook).includes('code-insights'))
