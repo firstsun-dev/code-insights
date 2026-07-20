@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate, FacetRow } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -31,6 +31,13 @@ export function fetchProject(id: string) {
   return request<{ project: Project }>(`/projects/${id}`);
 }
 
+export function patchProject(id: string, body: { name?: string; gitRemoteUrl?: string }) {
+  return request<{ project: Project }>(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 export function fetchSessions(params?: {
@@ -52,7 +59,10 @@ export function fetchSession(id: string) {
   return request<{ session: Session }>(`/sessions/${id}`);
 }
 
-export function patchSession(id: string, body: { customTitle: string }) {
+export function patchSession(
+  id: string,
+  body: { customTitle?: string; projectName?: string; gitRemoteUrl?: string }
+) {
   return request<{ ok: boolean }>(`/sessions/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -188,11 +198,11 @@ export function fetchOllamaModels(baseUrl?: string) {
   );
 }
 
-export function fetchLlamaCppModels(baseUrl?: string) {
-  const qs = baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : '';
-  return request<{ models: Array<{ id: string; object: string }> }>(
-    `/config/llm/llamacpp-models${qs}`
-  );
+export function fetchLlmModels(body: { provider: string; apiKey?: string; baseUrl?: string }) {
+  return request<{ models: Array<{ id: string; name: string }> }>('/config/llm/models', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function analyzePromptQuality(sessionId: string) {
@@ -232,6 +242,8 @@ export interface ExportGenerateRequest {
   projectId?: string;
   format: ExportGenerateFormat;
   depth?: ExportGenerateDepth;
+  dateFrom?: string; // YYYY-MM-DD format
+  dateTo?: string; // YYYY-MM-DD format
 }
 
 export interface ExportGenerateMetadata {
@@ -257,6 +269,8 @@ export async function exportGenerateStream(
   if (params.projectId) q.set('projectId', params.projectId);
   q.set('format', params.format);
   if (params.depth) q.set('depth', params.depth);
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom);
+  if (params.dateTo) q.set('dateTo', params.dateTo);
 
   const res = await fetch(`${BASE}/export/generate/stream?${q.toString()}`, { signal });
   if (!res.ok) {
@@ -311,19 +325,6 @@ export interface FacetAggregation {
   pqScores: PQDimensionScores | null;
   lifetimeSessions: number;
   totalTokens: number;
-}
-
-export function fetchFacets(params?: {
-  project?: string;
-  period?: string;
-  source?: string;
-}) {
-  const q = new URLSearchParams();
-  if (params?.project) q.set('project', params.project);
-  if (params?.period) q.set('period', params.period);
-  if (params?.source) q.set('source', params.source);
-  const qs = q.toString() ? `?${q.toString()}` : '';
-  return request<{ facets: FacetRow[]; missingCount: number; totalSessions: number }>(`/facets${qs}`);
 }
 
 export function fetchFacetAggregation(params?: {
@@ -470,66 +471,6 @@ export async function reflectGenerateStream(
   return res;
 }
 
-// ── Dispatch (blog post generator) ───────────────────────────────────────────
-
-export type DispatchTone = 'technical' | 'accessible' | 'quick-tips';
-export type DispatchFormat = 'blog' | 'linkedin';
-
-export interface DispatchRequest {
-  insightIds: string[];
-  context: string;
-  tone: DispatchTone;
-  format: DispatchFormat;
-  includeSessionBackground?: boolean;
-}
-
-export interface DispatchResponse {
-  markdown: string;
-  /** Plain text body without YAML frontmatter — use for LinkedIn copy and character count. */
-  body: string;
-  format: DispatchFormat;
-  frontmatter: {
-    title: string;
-    tags: string[];
-    tldr: string;
-  };
-  wordCount: number;
-  characterCount: number;
-  degraded: boolean;
-  model: string;
-  tokensUsed: {
-    input: number;
-    output: number;
-  };
-}
-
-export function generateDispatch(body: DispatchRequest): Promise<DispatchResponse> {
-  return request<DispatchResponse>('/dispatch/generate', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export interface DispatchImagePromptRequest {
-  title: string;
-  tags: string[];
-  tldr: string;
-  format: DispatchFormat;
-}
-
-export interface DispatchImagePromptResponse {
-  prompt: string;
-  model: string;
-  tokensUsed: { input: number; output: number };
-}
-
-export function generateDispatchImagePrompt(body: DispatchImagePromptRequest): Promise<DispatchImagePromptResponse> {
-  return request<DispatchImagePromptResponse>('/dispatch/image-prompt', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
 // ── Analysis Queue ────────────────────────────────────────────────────────────
 
 export interface AnalysisQueueItem {
@@ -554,5 +495,51 @@ export interface AnalysisQueueStatus {
 
 export function fetchAnalysisQueue() {
   return request<AnalysisQueueStatus>('/analysis/queue');
+}
+
+// ── Facets ─────────────────────────────────────────────────────────────────────
+
+export interface FacetRow {
+  session_id: string;
+  outcome_satisfaction: string;
+  workflow_pattern: string | null;
+  had_course_correction: number;
+  course_correction_reason: string | null;
+  iteration_count: number;
+  friction_points: string;
+  effective_patterns: string;
+  extracted_at: string;
+  analysis_version: string;
+}
+
+export interface FacetsResponse {
+  facets: FacetRow[];
+  missingCount: number;
+  totalSessions: number;
+}
+
+export function fetchFacets(params?: { project?: string; period?: string; source?: string }) {
+  const query = new URLSearchParams();
+  if (params?.project) query.set('project', params.project);
+  if (params?.period) query.set('period', params.period);
+  if (params?.source) query.set('source', params.source);
+  const qs = query.toString();
+  return request<FacetsResponse>(`/facets${qs ? `?${qs}` : ''}`);
+}
+
+// ── Dispatch (LLM-powered post generation) ──────────────────────────────────────
+
+export function generateDispatch(body: DispatchRequest) {
+  return request<DispatchResponse>('/dispatch/generate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function generateDispatchImagePrompt(body: DispatchImagePromptRequest) {
+  return request<DispatchImagePromptResponse>('/dispatch/image-prompt', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 

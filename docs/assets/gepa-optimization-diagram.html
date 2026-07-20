@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEPA Prompt Optimization Architecture</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-slate-950: #020617;
+            --bg-slate-900: #0f172a;
+            --border-slate-800: #1e293b;
+            --text-slate-100: #f1f5f9;
+            --text-slate-400: #94a3b8;
+            --cyan-400: #22d3ee;
+            --emerald-400: #34d399;
+            --violet-400: #a78bfa;
+            --amber-400: #fbbf24;
+            --rose-400: #fb7185;
+            --orange-400: #fb923c;
+        }
+
+        body {
+            background-color: var(--bg-slate-950);
+            color: var(--text-slate-100);
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 30px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--cyan-400);
+            margin-bottom: 8px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--cyan-400);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--cyan-400);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 1; }
+            70% { transform: scale(1.1); opacity: 0.7; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
+
+        h1 { margin: 0; font-size: 24px; font-weight: 700; }
+        .subtitle { color: var(--text-slate-400); font-size: 14px; margin-top: 4px; }
+
+        .diagram-container {
+            background-color: var(--bg-slate-900);
+            border: 1px solid var(--border-slate-800);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            overflow: hidden;
+            background-image: radial-gradient(var(--border-slate-800) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        svg { width: 100%; height: auto; display: block; }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 30px;
+        }
+
+        .card {
+            background-color: var(--bg-slate-900);
+            border: 1px solid var(--border-slate-800);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .card-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .card-dot.cyan { background-color: var(--cyan-400); box-shadow: 0 0 8px var(--cyan-400); }
+        .card-dot.emerald { background-color: var(--emerald-400); box-shadow: 0 0 8px var(--emerald-400); }
+        .card-dot.amber { background-color: var(--amber-400); box-shadow: 0 0 8px var(--amber-400); }
+
+        .card h3 { margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card ul { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-slate-400); line-height: 1.6; }
+        .card li { margin-bottom: 4px; }
+
+        footer {
+            margin-top: 40px;
+            font-size: 11px;
+            color: var(--text-slate-400);
+            display: flex;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="status">
+            <div class="dot"></div>
+            <span>LIVE SYSTEM ARCHITECTURE</span>
+        </div>
+        <h1>GEPA Prompt Optimization</h1>
+        <div class="subtitle">Multi-objective Genetic-Pareto Evolutionary Loop</div>
+    </header>
+
+    <div class="diagram-container">
+        <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+            <!-- Defs for markers and filters -->
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                </marker>
+                <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+                </marker>
+            </defs>
+
+            <!-- Background Grid (Visual only, CSS handles actual grid) -->
+            
+            <!-- Boundaries -->
+            <rect x="50" y="50" width="900" height="420" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" />
+            <text x="65" y="40" fill="#fbbf24" font-size="12" font-weight="700">OPTIMIZATION RUNTIME (GEPA)</text>
+
+            <!-- 1. Training Data Loader -->
+            <g transform="translate(100, 150)">
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5" />
+                <text x="80" y="35" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Data Loader</text>
+                <text x="80" y="55" text-anchor="middle" fill="#94a3b8" font-size="9">Session Transcripts</text>
+            </g>
+
+            <!-- 2. Student AI -->
+            <g transform="translate(340, 100)">
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5" />
+                <text x="80" y="35" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Student AI</text>
+                <text x="80" y="55" text-anchor="middle" fill="#94a3b8" font-size="9">Inference (Fast/Cheap)</text>
+            </g>
+
+            <!-- 3. Teacher AI -->
+            <g transform="translate(580, 100)">
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5" />
+                <text x="80" y="35" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Teacher AI</text>
+                <text x="80" y="55" text-anchor="middle" fill="#94a3b8" font-size="9">Evaluation (Strong)</text>
+            </g>
+
+            <!-- 4. Multi-Objective Metric -->
+            <g transform="translate(460, 240)">
+                <rect x="0" y="0" width="160" height="100" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="100" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d3 emerald-400" stroke="#34d399" stroke-width="1.5" />
+                <text x="80" y="30" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Metric Engine</text>
+                <text x="80" y="50" text-anchor="middle" fill="#34d399" font-size="8">Coverage • Precision</text>
+                <text x="80" y="65" text-anchor="middle" fill="#34d399" font-size="8">Actionability • Brevity</text>
+            </g>
+
+            <!-- 5. Pareto Frontier -->
+            <g transform="translate(750, 240)">
+                <rect x="0" y="0" width="160" height="100" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="100" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5" />
+                <text x="80" y="30" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Pareto Front</text>
+                <text x="80" y="50" text-anchor="middle" fill="#94a3b8" font-size="8">Genetic-Pareto Selection</text>
+                <circle cx="40" cy="75" r="3" fill="#fbbf24" />
+                <circle cx="80" cy="70" r="3" fill="#fbbf24" />
+                <circle cx="120" cy="80" r="3" fill="#fbbf24" />
+                <path d="M 40 75 Q 80 65 120 80" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="2,2" />
+            </g>
+
+            <!-- 6. Local Registry -->
+            <g transform="translate(460, 410)">
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="#0f172a" />
+                <rect x="0" y="0" width="160" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5" />
+                <text x="80" y="35" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="700">Registry</text>
+                <text x="80" y="55" text-anchor="middle" fill="#94a3b8" font-size="9">v1/ artifact.json</text>
+            </g>
+
+            <!-- Connections -->
+            <path d="M 260 190 L 340 140" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none" />
+            <path d="M 420 180 L 460 240" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none" />
+            <path d="M 660 180 L 620 240" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none" />
+            <path d="M 500 100 Q 540 80 580 100" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowhead)" fill="none" />
+            <path d="M 620 300 L 750 290" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)" fill="none" />
+            <path d="M 830 340 L 830 400 L 540 400 L 540 410" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none" />
+            
+            <!-- Legend -->
+            <g transform="translate(50, 520)">
+                <rect x="0" y="0" width="12" height="12" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1" />
+                <text x="20" y="10" fill="#94a3b8" font-size="9">Inference</text>
+                
+                <rect x="100" y="0" width="12" height="12" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1" />
+                <text x="120" y="10" fill="#94a3b8" font-size="9">Scoring</text>
+
+                <rect x="200" y="0" width="12" height="12" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" />
+                <text x="220" y="10" fill="#94a3b8" font-size="9">Genetic-Pareto</text>
+            </g>
+        </svg>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-dot cyan"></div>
+                <h3>Evolutive Loop</h3>
+            </div>
+            <ul>
+                <li>• Multi-trial mutations</li>
+                <li>• Reflective feedback</li>
+                <li>• Pareto selection</li>
+                <li>• Manifest versioning</li>
+            </ul>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-dot emerald"></div>
+                <h3>Core Objectives</h3>
+            </div>
+            <ul>
+                <li>• Coverage: Content capture</li>
+                <li>• Precision: Fact density</li>
+                <li>• Actionability: Concrete guidance</li>
+                <li>• Brevity: Token efficiency</li>
+            </ul>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-dot amber"></div>
+                <h3>Persistence</h3>
+            </div>
+            <ul>
+                <li>• Atomic manifest updates</li>
+                <li>• JSON-serialized programs</li>
+                <li>• Local-first SQLite data</li>
+                <li>• Zero-cloud retention</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>
+        <span>ENGINEERING DOCUMENTATION</span>
+        <span>VERSION: 4.8.0</span>
+        <span>PROJECT: CODE-INSIGHTS</span>
+    </footer>
+</body>
+</html>

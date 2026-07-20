@@ -3,10 +3,12 @@
   "title": "SessionAnalysisResponse",
   "description": "Hand-maintained JSON schema for claude -p --json-schema. Derived from AnalysisResponse in prompt-types.ts. Keep in sync when prompt-types.ts changes.",
   "type": "object",
+  "additionalProperties": false,
   "required": ["facets", "summary", "decisions", "learnings"],
   "properties": {
     "facets": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "outcome_satisfaction",
         "workflow_pattern",
@@ -42,7 +44,8 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["category", "description", "severity", "resolution"],
+            "additionalProperties": false,
+            "required": ["_reasoning", "category", "attribution", "description", "severity", "resolution"],
             "properties": {
               "_reasoning": {
                 "type": "string",
@@ -79,7 +82,8 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["category", "description", "confidence"],
+            "additionalProperties": false,
+            "required": ["_reasoning", "category", "description", "confidence", "driver"],
             "properties": {
               "_reasoning": {
                 "type": "string",
@@ -115,7 +119,8 @@
     },
     "summary": {
       "type": "object",
-      "required": ["title", "content", "bullets"],
+      "additionalProperties": false,
+      "required": ["title", "content", "outcome", "bullets"],
       "properties": {
         "title": { "type": "string" },
         "content": { "type": "string" },
@@ -133,7 +138,8 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "reasoning"],
+        "additionalProperties": false,
+        "required": ["title", "situation", "choice", "reasoning", "alternatives", "trade_offs", "revisit_when", "confidence", "evidence"],
         "properties": {
           "title": { "type": "string" },
           "situation": { "type": "string" },
@@ -143,6 +149,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": false,
               "required": ["option", "rejected_because"],
               "properties": {
                 "option": { "type": "string" },
@@ -161,7 +168,8 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title"],
+        "additionalProperties": false,
+        "required": ["title", "symptom", "root_cause", "takeaway", "applies_when", "confidence", "evidence"],
         "properties": {
           "title": { "type": "string" },
           "symptom": { "type": "string" },

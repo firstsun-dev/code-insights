@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { runMigrations } from '@code-insights/cli/db/schema';
+import * as sqliteVec from 'sqlite-vec';
 
 // ──────────────────────────────────────────────────────
 // Module-scoped mutable DB reference for mocking.
@@ -525,5 +526,64 @@ describe('extractFacetsOnly', () => {
     expect(facetRow).toBeTruthy();
     const patterns = JSON.parse(facetRow!.effective_patterns);
     expect(patterns[0].category).toBe('structured-planning');
+  });
+});
+
+// ──────────────────────────────────────────────────────
+// Retrieval-augmented insight generation (AutoRefine pattern)
+// ──────────────────────────────────────────────────────
+
+describe('analyzeSession with retrieval', () => {
+  beforeEach(() => {
+    testDb = initTestDb();
+    seedTestSession(testDb);
+    mockChat.mockReset();
+    mockIsConfigured.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    testDb.close();
+  });
+
+  it('retrieval enabled but no vec_insights table: graceful fallback', async () => {
+    mockChat.mockResolvedValue({
+      content: JSON.stringify(VALID_ANALYSIS_RESPONSE),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    // No vec_insights table created — should gracefully fall back
+    const result = await analyzeSession(makeSession(), [makeMessage()]);
+    expect(result.success).toBe(true);
+    expect(result.insights.length).toBe(3);
+  });
+
+  it('retrieval enabled with vec_insights table: does not crash', async () => {
+    // Create vec_insights table
+    const db = testDb;
+    sqliteVec.load(db);
+    db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS vec_insights USING vec0(id TEXT PRIMARY KEY, embedding float[768])");
+
+    // Seed a past session so the FK constraint is satisfied
+    db.prepare(
+      `INSERT INTO sessions (id, project_id, project_name, project_path, started_at, ended_at, message_count, source_tool) VALUES ('sess-past', 'proj-test', 'test-project', '/test', '2025-06-14T09:00:00Z', '2025-06-14T10:00:00Z', 3, 'claude-code')`
+    ).run();
+
+    // Insert a past insight with embedding (embedding_status has DEFAULT 'pending')
+    const pastInsightId = 'past-insight-1';
+    db.prepare('INSERT INTO insights (id, session_id, project_id, project_name, type, title, content, summary, bullets, confidence, source, metadata, timestamp, created_at, scope, analysis_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(pastInsightId, 'sess-past', 'proj-test', 'test-project', 'decision', 'Past Decision', 'Past content about testing', 'Past summary', '[]', 0.85, 'llm', null, '2025-06-14T10:00:00Z', '2025-06-14T10:00:00Z', 'session', '3.0.0');
+
+    const pastVec = new Float32Array(768).fill(0.5);
+    const blob = Buffer.from(pastVec.buffer, pastVec.byteOffset, pastVec.byteLength);
+    db.prepare('INSERT OR REPLACE INTO vec_insights (id, embedding) VALUES (?, ?)').run(pastInsightId, blob);
+
+    mockChat.mockResolvedValue({
+      content: JSON.stringify(VALID_ANALYSIS_RESPONSE),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    const result = await analyzeSession(makeSession(), [makeMessage()]);
+    expect(result.success).toBe(true);
+    expect(mockChat).toHaveBeenCalled();
   });
 });

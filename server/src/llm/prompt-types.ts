@@ -12,3 +12,4 @@ export type {
   PromptQualityDimensionScores,
   PromptQualityResponse,
 } from '@code-insights/cli/analysis/prompt-types';
+export type { RelatedInsight } from '@code-insights/cli/analysis/prompts';

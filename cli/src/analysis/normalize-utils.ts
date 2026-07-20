@@ -39,8 +39,9 @@ export interface NormalizerConfig {
  * 3. Substring match (shorter >= 5 chars, >= 50% of longer) → return canonical
  * 4. No match → return original (novel category)
  */
-export function normalizeCategory(category: string, config: NormalizerConfig): string {
-  const lower = category.toLowerCase();
+export function normalizeCategory(category: string | null | undefined, config: NormalizerConfig): string {
+  if (typeof category !== 'string' || !category.trim()) return 'unknown';
+  const lower = category.trim().toLowerCase();
 
   // 1. Exact match
   for (const canonical of config.canonicalCategories) {

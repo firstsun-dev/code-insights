@@ -70,44 +70,25 @@ describe('ClaudeNativeRunner.runAnalysis()', () => {
 
     expect(mockExecFileSync).toHaveBeenCalledWith(
       'claude',
-      expect.arrayContaining(['-p', '--model', 'sonnet', '--output-format', 'json', '--append-system-prompt-file', expect.stringContaining('ci-prompt-')]),
+      expect.arrayContaining([
+        '-p', 
+        '--output-format', 'json', 
+        '--append-system-prompt-file', expect.stringContaining('ci-prompt-'),
+        '--no-session-persistence',
+        '--disable-slash-commands',
+        '--tools', '""'
+      ]),
       expect.objectContaining({
         input: 'Analyze this session.',
         encoding: 'utf-8',
         timeout: 300_000,
-        maxBuffer: 10 * 1024 * 1024,
+        maxBuffer: 30 * 1024 * 1024,
       })
     );
 
     // --json-schema flag must NOT appear when jsonSchema is not provided
     const callArgs = mockExecFileSync.mock.calls[0][1] as string[];
     expect(callArgs).not.toContain('--json-schema');
-  });
-
-  it('passes custom model to claude -p args', async () => {
-    const llmJson = '{"summary": {"title": "t", "content": "c", "bullets": []}}';
-    mockExecFileSync.mockReturnValueOnce(makeEnvelope(llmJson) as unknown as Buffer);
-    const runner = new ClaudeNativeRunner({ model: 'opus' });
-
-    await runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' });
-
-    const callArgs = mockExecFileSync.mock.calls[0][1] as string[];
-    const modelIndex = callArgs.indexOf('--model');
-    expect(modelIndex).toBeGreaterThan(-1);
-    expect(callArgs[modelIndex + 1]).toBe('opus');
-  });
-
-  it('uses sonnet as default model when no model option provided', async () => {
-    const llmJson = '{"summary": {"title": "t", "content": "c", "bullets": []}}';
-    mockExecFileSync.mockReturnValueOnce(makeEnvelope(llmJson) as unknown as Buffer);
-    const runner = new ClaudeNativeRunner();
-
-    const result = await runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' });
-
-    const callArgs = mockExecFileSync.mock.calls[0][1] as string[];
-    const modelIndex = callArgs.indexOf('--model');
-    expect(callArgs[modelIndex + 1]).toBe('sonnet');
-    expect(result.model).toBe('sonnet');
   });
 
   it('includes --json-schema arg when jsonSchema is provided', async () => {
@@ -150,7 +131,7 @@ describe('ClaudeNativeRunner.runAnalysis()', () => {
     expect(result.rawJson).toBe(llmJson);
     expect(result.inputTokens).toBe(0);
     expect(result.outputTokens).toBe(0);
-    expect(result.model).toBe('sonnet'); // DEFAULT_NATIVE_MODEL
+    expect(result.model).toBe('claude-native');
     expect(result.provider).toBe('claude-code-native');
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
@@ -170,14 +151,6 @@ describe('ClaudeNativeRunner.runAnalysis()', () => {
 
     await expect(runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' }))
       .rejects.toThrow(/non-JSON output/);
-  });
-
-  it('throws when output is JSON but not an array', async () => {
-    mockExecFileSync.mockReturnValueOnce('{"type":"result"}' as unknown as Buffer);
-    const runner = new ClaudeNativeRunner();
-
-    await expect(runner.runAnalysis({ systemPrompt: 's', userPrompt: 'u' }))
-      .rejects.toThrow(/not an array/);
   });
 
   it('throws when event array is empty', async () => {
