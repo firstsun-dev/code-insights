@@ -14,8 +14,8 @@ export class ClaudeCodeProvider implements SessionProvider {
     return 'claude-code';
   }
 
-  async discover(options?: { projectFilter?: string }): Promise<string[]> {
-    const baseDir = getClaudeDir();
+  async discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]> {
+    const baseDir = getClaudeDir(options?.homeRoot);
 
     if (!fs.existsSync(baseDir)) {
       return [];

@@ -72,7 +72,8 @@ export function buildPeriodFilter(period: string): string | null {
 export function buildWhereClause(
   period: string,
   project?: string,
-  source?: string
+  source?: string,
+  homeId?: string
 ): { where: string; params: (string | number)[] } {
   // Always exclude soft-deleted sessions from aggregations
   const conditions: string[] = ['s.deleted_at IS NULL'];
@@ -100,6 +101,10 @@ export function buildWhereClause(
   if (source) {
     conditions.push('s.source_tool = ?');
     params.push(source);
+  }
+  if (homeId) {
+    conditions.push('s.home_id = ?');
+    params.push(homeId);
   }
 
   return {
@@ -177,7 +182,8 @@ export function getAggregatedData(
   where: string,
   params: (string | number)[],
   project?: string,
-  source?: string
+  source?: string,
+  homeId?: string
 ): AggregatedData {
   const hasWhere = where.length > 0;
   const extraPrefix = hasWhere ? 'AND' : 'WHERE';
@@ -384,7 +390,7 @@ export function getAggregatedData(
   // Streak: count consecutive days (backward from today) with at least one session.
   // Always uses all-time scope — filtering by period would cap streak at the window size.
   // Respects project and source filters since those are user-scope constraints.
-  const { where: streakWhere, params: streakParams } = buildWhereClause('all', project, source);
+  const { where: streakWhere, params: streakParams } = buildWhereClause('all', project, source, homeId);
   const sessionDates = db.prepare(
     `SELECT DISTINCT date(started_at) as session_date FROM sessions s ${streakWhere} ORDER BY session_date DESC`
   ).all(...streakParams) as Array<{ session_date: string }>;
@@ -426,7 +432,7 @@ export function getAggregatedData(
   const pqScores = computePQScores(db, where, params);
 
   // Lifetime session count — no date filter, respects project/source scope only
-  const { where: lifetimeWhere, params: lifetimeParams } = buildWhereClause('all', project, source);
+  const { where: lifetimeWhere, params: lifetimeParams } = buildWhereClause('all', project, source, homeId);
   const lifetimeRow = db.prepare(
     `SELECT COUNT(*) as count FROM sessions s ${lifetimeWhere}`
   ).get(...lifetimeParams) as { count: number };

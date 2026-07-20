@@ -56,13 +56,14 @@ app.post('/generate', requireLLM(), async (c) => {
     period?: string;
     project?: string;
     source?: string;
+    homeId?: string;
   }>();
 
   const sections = body.sections && body.sections.length > 0 ? body.sections : ALL_SECTIONS;
   const period = body.period || '30d';
 
   const db = getDb();
-  const { where, params } = buildWhereClause(period, body.project, body.source);
+  const { where, params } = buildWhereClause(period, body.project, body.source, body.homeId);
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
@@ -73,7 +74,7 @@ app.post('/generate', requireLLM(), async (c) => {
         data: JSON.stringify({ phase: 'aggregating', message: 'Aggregating facets...' }),
       });
 
-      const aggregated = getAggregatedData(db, where, params, body.project, body.source);
+      const aggregated = getAggregatedData(db, where, params, body.project, body.source, body.homeId);
 
       if (aggregated.totalSessions === 0) {
         await stream.writeSSE({
@@ -248,9 +249,10 @@ app.get('/results', (c) => {
   const period = c.req.query('period') || '30d';
   const project = c.req.query('project');
   const source = c.req.query('source');
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project, source);
-  const aggregated = getAggregatedData(db, where, params, project, source);
+  const { where, params } = buildWhereClause(period, project, source, homeId);
+  const aggregated = getAggregatedData(db, where, params, project, source, homeId);
 
   return c.json(aggregated);
 });

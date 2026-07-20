@@ -150,6 +150,8 @@ CREATE TABLE IF NOT EXISTS usage_stats (
 );
 `;
 
-export const CURRENT_SCHEMA_VERSION = 11;
+// Version 12: Add homes table (multi-home-directory support) + sessions.home_id column.
+// See db/migrate.ts applyV12() for the full migration and per-version history.
+export const CURRENT_SCHEMA_VERSION = 12;
 
 export { runMigrations } from './migrate.js';

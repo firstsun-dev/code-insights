@@ -7,6 +7,7 @@ import { autoDetectOllama } from '../utils/ollama-detect.js';
 import { trackEvent, identifyUser, captureError, classifyError } from '../utils/telemetry.js';
 import { insertSessionWithProjectAndReturnIsNew, insertMessages, recalculateUsageStats } from '../db/write.js';
 import { getDb, getMigrationResult } from '../db/client.js';
+import { listHomes, type Home } from '../db/homes.js';
 import { getAllProviders, getProvider } from '../providers/registry.js';
 import { setProviderVerbose } from '../providers/context.js';
 import type { SessionProvider } from '../providers/types.js';
@@ -21,6 +22,7 @@ interface SyncOptions {
   verbose?: boolean;
   regenerateTitles?: boolean;
   source?: string;
+  homeId?: string[];
 }
 
 export interface SyncResult {
@@ -106,6 +108,23 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
     providers = getAllProviders();
   }
 
+  // Resolve which homes to sync. Explicit --home flags target specific homes
+  // (must all exist); otherwise default to all enabled homes.
+  const allHomes = listHomes();
+  let targetHomes: Home[];
+  if (options.homeId && options.homeId.length > 0) {
+    const knownIds = new Set(allHomes.map(h => h.id));
+    const unknown = options.homeId.filter(id => !knownIds.has(id));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Unknown home id(s): ${unknown.join(', ')}. Available: ${allHomes.map(h => h.id).join(', ')}`
+      );
+    }
+    targetHomes = allHomes.filter(h => options.homeId!.includes(h.id));
+  } else {
+    targetHomes = allHomes.filter(h => h.enabled);
+  }
+
   // Load sync state
   // When --force is used with --source, only clear the targeted provider's entries
   // instead of nuking the entire sync state.
@@ -114,11 +133,13 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
     if (options.source) {
       // Targeted force: remove only entries belonging to the specified provider's files
       const targetProviderPaths = new Set<string>();
-      for (const provider of providers) {
-        const discovered = await provider.discover({ projectFilter: options.project });
-        for (const p of discovered) {
-          const { realPath } = splitVirtualPath(p);
-          targetProviderPaths.add(realPath);
+      for (const home of targetHomes) {
+        for (const provider of providers) {
+          const discovered = await provider.discover({ projectFilter: options.project, homeRoot: home.path });
+          for (const p of discovered) {
+            const { realPath } = splitVirtualPath(p);
+            targetProviderPaths.add(realPath);
+          }
         }
       }
       for (const key of Object.keys(syncState.files)) {
@@ -140,6 +161,10 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
   let totalDiscoveredFiles = 0;
   let discoveryWarned = false;
 
+  for (const home of targetHomes) {
+  if (targetHomes.length > 1) {
+    log(chalk.cyan(`\n  Home: ${home.label} (${home.path})`));
+  }
   for (const provider of providers) {
     const providerName = provider.getProviderName();
     try {
@@ -149,7 +174,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
 
       // Discovery
       spinner.start(`Discovering ${providerName} sessions...`);
-      const sessionFiles = await provider.discover({ projectFilter: options.project });
+      const sessionFiles = await provider.discover({ projectFilter: options.project, homeRoot: home.path });
       totalDiscoveredFiles += sessionFiles.length;
       spinner.succeed(`Found ${sessionFiles.length} ${providerName} session files`);
       if (!discoveryWarned && totalDiscoveredFiles > 500) {
@@ -199,7 +224,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
           }
 
           // Write session and messages to SQLite
-          const isNew = insertSessionWithProjectAndReturnIsNew(session, !!options.force);
+          const isNew = insertSessionWithProjectAndReturnIsNew(session, !!options.force, home.id);
           insertMessages(session, !!options.force);
 
           // Update and persist sync state after each file
@@ -225,7 +250,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
         }
       }
 
-      sessionsByProvider[providerName] = providerSyncedCount;
+      sessionsByProvider[providerName] = (sessionsByProvider[providerName] ?? 0) + providerSyncedCount;
 
       // One summary line per provider instead of per-file noise
       spinner.stop();
@@ -248,6 +273,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
         console.error(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
       }
     }
+  }
   }
 
   // Resurrect soft-deleted sessions on --force so users get a clean slate

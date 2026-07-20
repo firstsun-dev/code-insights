@@ -14,7 +14,7 @@ const app = new Hono();
 
 app.get('/', (c) => {
   const db = getDb();
-  const { projectId, sourceTool, limit, offset, q, from, to } = c.req.query();
+  const { projectId, sourceTool, limit, offset, q, from, to, homeId } = c.req.query();
 
   // Validate from/to are ISO 8601 date strings before passing to SQLite comparisons.
   // Invalid date strings in SQLite produce silent wrong results rather than errors.
@@ -35,6 +35,10 @@ app.get('/', (c) => {
   if (sourceTool) {
     conditions.push('source_tool = ?');
     params.push(sourceTool);
+  }
+  if (homeId) {
+    conditions.push('home_id = ?');
+    params.push(homeId);
   }
   if (q) {
     const likeParam = `%${escapeLike(q)}%`;
@@ -60,7 +64,7 @@ app.get('/', (c) => {
            device_platform, synced_at, total_input_tokens, total_output_tokens,
            cache_creation_tokens, cache_read_tokens, estimated_cost_usd,
            models_used, primary_model, usage_source,
-           compact_count, auto_compact_count, slash_commands
+           compact_count, auto_compact_count, slash_commands, home_id
     FROM sessions
     ${where}
     ORDER BY started_at DESC
@@ -99,7 +103,7 @@ app.get('/:id', (c) => {
            device_platform, synced_at, total_input_tokens, total_output_tokens,
            cache_creation_tokens, cache_read_tokens, estimated_cost_usd,
            models_used, primary_model, usage_source,
-           compact_count, auto_compact_count, slash_commands
+           compact_count, auto_compact_count, slash_commands, home_id
     FROM sessions WHERE id = ? AND deleted_at IS NULL
   `).get(c.req.param('id')) as any;
   

@@ -92,7 +92,7 @@ function getStmts() {
         parent_session_id, agent_type,
         device_id, device_hostname, device_platform,
         total_input_tokens, total_output_tokens, cache_creation_tokens, cache_read_tokens,
-        estimated_cost_usd, models_used, primary_model, usage_source
+        estimated_cost_usd, models_used, primary_model, usage_source, home_id
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -103,7 +103,7 @@ function getStmts() {
         ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, ?, ?, ?, ?
       )
       ON CONFLICT(id) DO UPDATE SET
         generated_title         = COALESCE(sessions.generated_title, excluded.generated_title),
@@ -128,6 +128,7 @@ function getStmts() {
         models_used             = excluded.models_used,
         primary_model           = excluded.primary_model,
         usage_source            = excluded.usage_source,
+        home_id                 = excluded.home_id,
         synced_at               = datetime('now')
     `);
   }
@@ -193,19 +194,23 @@ function getStmts() {
  * isForce: when true (--force sync), usage stats on the project are NOT
  * incrementally added — they'll be recalculated via recalculateUsageStats().
  */
-export function insertSessionWithProject(session: ParsedSession, isForce = false): void {
-  insertSessionWithProjectInternal(session, isForce);
+export function insertSessionWithProject(
+  session: ParsedSession, isForce = false, homeId = 'default'
+): void {
+  insertSessionWithProjectInternal(session, isForce, homeId);
 }
 
 /**
  * Insert a session and return whether it was new to the DB.
  * Lets callers avoid a duplicate sessionExists() query.
  */
-export function insertSessionWithProjectAndReturnIsNew(session: ParsedSession, isForce = false): boolean {
-  return insertSessionWithProjectInternal(session, isForce);
+export function insertSessionWithProjectAndReturnIsNew(
+  session: ParsedSession, isForce = false, homeId = 'default'
+): boolean {
+  return insertSessionWithProjectInternal(session, isForce, homeId);
 }
 
-function insertSessionWithProjectInternal(session: ParsedSession, isForce: boolean): boolean {
+function insertSessionWithProjectInternal(session: ParsedSession, isForce: boolean, homeId: string): boolean {
   const db = getDb();
   const { projectId, source: projectIdSource, gitRemoteUrl } = generateStableProjectId(session.projectPath);
   const deviceInfo = getDeviceInfo();
@@ -214,7 +219,7 @@ function insertSessionWithProjectInternal(session: ParsedSession, isForce: boole
 
   const tx = db.transaction(() => {
     upsertProject(projectId, session, projectIdSource, gitRemoteUrl, isNew, isForce);
-    upsertSession(session, projectId, gitRemoteUrl, deviceInfo);
+    upsertSession(session, projectId, gitRemoteUrl, deviceInfo, homeId);
     if (isNew) {
       updateGlobalUsageStats(session, isForce);
     }
@@ -274,6 +279,7 @@ function upsertSession(
   projectId: string,
   gitRemoteUrl: string | null,
   deviceInfo: { deviceId: string; hostname: string; platform: string },
+  homeId: string,
 ): void {
   const stmts = getStmts();
   stmts.upsertSession.run(
@@ -311,6 +317,7 @@ function upsertSession(
     session.usage?.modelsUsed ? JSON.stringify(session.usage.modelsUsed) : null,
     session.usage?.primaryModel ?? null,
     session.usage?.usageSource ?? null,
+    homeId,
   );
 }
 

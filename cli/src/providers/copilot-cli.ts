@@ -14,8 +14,8 @@ export class CopilotCliProvider implements SessionProvider {
     return 'copilot-cli';
   }
 
-  async discover(options?: { projectFilter?: string }): Promise<string[]> {
-    const copilotHome = getCopilotHome();
+  async discover(options?: { projectFilter?: string; homeRoot?: string }): Promise<string[]> {
+    const copilotHome = getCopilotHome(options?.homeRoot);
     if (!copilotHome) return [];
 
     const files: string[] = [];
@@ -44,11 +44,11 @@ export class CopilotCliProvider implements SessionProvider {
 // Discovery helpers
 // ---------------------------------------------------------------------------
 
-function getCopilotHome(): string | null {
+function getCopilotHome(homeRoot?: string): string | null {
   const envHome = process.env.COPILOT_HOME;
   if (envHome && fs.existsSync(envHome)) return envHome;
 
-  const home = os.homedir();
+  const home = homeRoot ?? os.homedir();
   const defaultDir = path.join(home, '.copilot');
   return fs.existsSync(defaultDir) ? defaultDir : null;
 }

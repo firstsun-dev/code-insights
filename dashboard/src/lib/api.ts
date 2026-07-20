@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -38,17 +38,43 @@ export function patchProject(id: string, body: { name?: string; gitRemoteUrl?: s
   });
 }
 
+// ── Homes ─────────────────────────────────────────────────────────────────────
+
+export function fetchHomes() {
+  return request<{ homes: Home[] }>('/homes');
+}
+
+export function addHome(body: { path: string; label?: string }) {
+  return request<{ home: Home }>('/homes', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function removeHome(id: string) {
+  return request<{ ok: boolean }>(`/homes/${id}`, { method: 'DELETE' });
+}
+
+export function setHomeEnabled(id: string, enabled: boolean) {
+  return request<{ home: Home }>(`/homes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 export function fetchSessions(params?: {
   projectId?: string;
   sourceTool?: string;
+  homeId?: string;
   limit?: number;
   offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.projectId) q.set('projectId', params.projectId);
   if (params?.sourceTool) q.set('sourceTool', params.sourceTool);
+  if (params?.homeId) q.set('homeId', params.homeId);
   if (params?.limit !== undefined) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
   const qs = q.toString() ? `?${q.toString()}` : '';
@@ -140,8 +166,16 @@ export function fetchSearch(params: { q: string; limit?: number }) {
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
-export function fetchDashboardStats(range: '7d' | '30d' | '90d' | 'all' = '7d') {
-  return request<{ range: string; stats: DashboardStats }>(`/analytics/dashboard?range=${range}`);
+export function fetchDashboardStats(range: '7d' | '30d' | '90d' | 'all' = '7d', homeId?: string) {
+  const q = new URLSearchParams({ range });
+  if (homeId) q.set('homeId', homeId);
+  return request<{ range: string; stats: DashboardStats }>(`/analytics/dashboard?${q}`);
+}
+
+export function fetchDailyStats(range: '7d' | '30d' | '90d' | 'all' = '7d', homeId?: string) {
+  const q = new URLSearchParams({ range });
+  if (homeId) q.set('homeId', homeId);
+  return request<{ range: string; daily: DailyStats[] }>(`/analytics/daily?${q}`);
 }
 
 // ── Analysis (Phase 4) ────────────────────────────────────────────────────────

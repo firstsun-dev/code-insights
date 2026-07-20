@@ -6,29 +6,36 @@ const app = new Hono();
 const VALID_RANGES = ['7d', '30d', '90d', 'all'] as const;
 type Range = typeof VALID_RANGES[number];
 
+function periodStartFor(range: string): string | null {
+  const now = new Date();
+  if (range === '7d') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  if (range === '30d') return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  if (range === '90d') return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  return null;
+}
+
 // Dashboard overview stats for a given time range (e.g. ?range=7d|30d|90d|all)
 app.get('/dashboard', (c) => {
   const db = getDb();
-  const { range = '7d' } = c.req.query();
+  const { range = '7d', homeId } = c.req.query();
 
   if (!VALID_RANGES.includes(range as Range)) {
     return c.json({ error: `Invalid range. Must be one of: ${VALID_RANGES.join(', ')}` }, 400);
   }
 
-  let periodStart: string | null = null;
-  const now = new Date();
-  if (range === '7d') {
-    periodStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  } else if (range === '30d') {
-    periodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  } else if (range === '90d') {
-    periodStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  }
+  const periodStart = periodStartFor(range);
 
-  const where = periodStart
-    ? 'WHERE started_at >= ? AND deleted_at IS NULL'
-    : 'WHERE deleted_at IS NULL';
-  const params = periodStart ? [periodStart] : [];
+  const conditions: string[] = ['deleted_at IS NULL'];
+  const params: string[] = [];
+  if (periodStart) {
+    conditions.push('started_at >= ?');
+    params.push(periodStart);
+  }
+  if (homeId) {
+    conditions.push('home_id = ?');
+    params.push(homeId);
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   const stats = db.prepare(`
     SELECT
@@ -51,6 +58,75 @@ app.get('/dashboard', (c) => {
   `).get(...params);
 
   return c.json({ range, stats });
+});
+
+// Daily session/insight counts for the activity chart, aggregated entirely
+// server-side (no row cap) so 'all' range genuinely covers full history
+// regardless of total session count.
+app.get('/daily', (c) => {
+  const db = getDb();
+  const { range = '7d', homeId } = c.req.query();
+
+  if (!VALID_RANGES.includes(range as Range)) {
+    return c.json({ error: `Invalid range. Must be one of: ${VALID_RANGES.join(', ')}` }, 400);
+  }
+
+  const periodStart = periodStartFor(range);
+
+  const sessionConditions: string[] = ['deleted_at IS NULL'];
+  const sessionParams: string[] = [];
+  if (periodStart) {
+    sessionConditions.push('started_at >= ?');
+    sessionParams.push(periodStart);
+  }
+  if (homeId) {
+    sessionConditions.push('home_id = ?');
+    sessionParams.push(homeId);
+  }
+
+  const sessionRows = db.prepare(`
+    SELECT date(started_at) AS date, COUNT(*) AS count
+    FROM sessions
+    WHERE ${sessionConditions.join(' AND ')}
+    GROUP BY date(started_at)
+  `).all(...sessionParams) as { date: string; count: number }[];
+
+  const insightConditions: string[] = ['s.deleted_at IS NULL'];
+  const insightParams: string[] = [];
+  if (periodStart) {
+    insightConditions.push('i.timestamp >= ?');
+    insightParams.push(periodStart);
+  }
+  if (homeId) {
+    insightConditions.push('s.home_id = ?');
+    insightParams.push(homeId);
+  }
+
+  const insightRows = db.prepare(`
+    SELECT date(i.timestamp) AS date, COUNT(*) AS count
+    FROM insights i
+    JOIN sessions s ON i.session_id = s.id
+    WHERE ${insightConditions.join(' AND ')}
+    GROUP BY date(i.timestamp)
+  `).all(...insightParams) as { date: string; count: number }[];
+
+  const grouped: Record<string, { session_count: number; insight_count: number }> = {};
+  for (const row of sessionRows) {
+    (grouped[row.date] ??= { session_count: 0, insight_count: 0 }).session_count = row.count;
+  }
+  for (const row of insightRows) {
+    (grouped[row.date] ??= { session_count: 0, insight_count: 0 }).insight_count = row.count;
+  }
+
+  const daily = Object.entries(grouped)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, counts]) => ({
+      date,
+      session_count: counts.session_count,
+      insight_count: counts.insight_count,
+    }));
+
+  return c.json({ range, daily });
 });
 
 // Global cumulative usage stats
