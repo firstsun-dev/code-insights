@@ -48,11 +48,9 @@ export function saveConfig(config: ClaudeInsightConfig): void {
     clean.dashboard = {
       ...(config.dashboard.port !== undefined ? { port: config.dashboard.port } : {}),
     };
-    // Strip apiKey from LLM config — keys are resolved from environment variables
-    // at runtime and are never persisted to disk.
+    // Persist LLM config including apiKey — users can set once and reuse
     if (config.dashboard.llm !== undefined) {
-      const { apiKey: _omitted, ...llmWithoutKey } = config.dashboard.llm;
-      clean.dashboard.llm = llmWithoutKey;
+      clean.dashboard.llm = { ...config.dashboard.llm };
     }
     // Preserve dashboard.analysis sub-object (retrieval config, etc.)
     if (config.dashboard?.analysis) {

@@ -3,13 +3,15 @@
 import type { LLMClient, LLMMessage, LLMResponse, ChatOptions } from '../types.js';
 import { flattenContent } from '../types.js';
 
-export function createOpenAIClient(apiKey: string, model: string): LLMClient {
+export function createOpenAIClient(apiKey: string, model: string, baseUrl?: string): LLMClient {
+  const base = (baseUrl || 'https://api.openai.com').trim().replace(/\/$/, '');
+
   return {
     provider: 'openai',
     model,
 
     async chat(messages: LLMMessage[], options?: ChatOptions): Promise<LLMResponse> {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(`${base}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -18,8 +20,6 @@ export function createOpenAIClient(apiKey: string, model: string): LLMClient {
         signal: options?.signal,
         body: JSON.stringify({
           model,
-          // flattenContent converts ContentBlock[] to string; strings pass through unchanged.
-          // OpenAI gets automatic prefix caching for free when prefixes match — no extra config needed.
           messages: messages.map(m => ({ role: m.role, content: flattenContent(m.content) })),
           temperature: options?.temperature ?? 0.7,
           max_tokens: 8192,
