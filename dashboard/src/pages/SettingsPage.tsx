@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useLlmConfig, useSaveLlmConfig } from '@/hooks/useConfig';
 import { useUserProfile, normalizeGithubUsername } from '@/hooks/useUserProfile';
-import { fetchOllamaModels, fetchLlamaCppModels, testLlmConfig } from '@/lib/api';
+import { fetchLlmModels, fetchOllamaModels, testLlmConfig } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +21,7 @@ import {
   User,
 } from 'lucide-react';
 
-// TODO: tech debt — duplicated provider types (this local type mirrors dashboard/src/lib/types.ts LLMConfig.provider)
-type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'llamacpp';
+type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral';
 
 interface ProviderInfo {
   id: LLMProvider;
@@ -63,7 +62,6 @@ const PROVIDERS: ProviderInfo[] = [
     models: [
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Fast' },
       { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Capable' },
-      { id: 'gemma-3-27b-it', name: 'Gemma 4 27B IT', description: 'Free via Gemini API' },
     ],
   },
   {
@@ -75,18 +73,29 @@ const PROVIDERS: ProviderInfo[] = [
       { id: 'qwen3:14b', name: 'Qwen3 14B' },
       { id: 'mistral', name: 'Mistral' },
       { id: 'qwen2.5-coder', name: 'Qwen 2.5 Coder' },
-      { id: 'gemma4', name: 'Gemma 4 12B' },
-      { id: 'gemma4:27b', name: 'Gemma 4 27B' },
     ],
   },
   {
-    id: 'llamacpp',
-    name: 'llama.cpp (Local)',
-    requiresApiKey: false,
+    id: 'openrouter',
+    name: 'OpenRouter',
+    requiresApiKey: true,
+    apiKeyLink: 'https://openrouter.ai/settings/keys',
     models: [
-      { id: 'gemma-4-12b', name: 'Gemma 4 12B (Q4_K_M)', description: 'Flagship local model' },
-      { id: 'gemma-4-27b', name: 'Gemma 4 27B (Q4_K_M)', description: 'Large local model' },
-      { id: 'custom', name: 'Custom model', description: 'Any GGUF loaded in llama-server' },
+      { id: 'openrouter/auto', name: 'OpenRouter Auto (Default)' },
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+      { id: 'openai/gpt-4o', name: 'GPT-4o' },
+      { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' },
+    ],
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral',
+    requiresApiKey: true,
+    apiKeyLink: 'https://console.mistral.ai/api-keys/',
+    models: [
+      { id: 'mistral-large-latest', name: 'Mistral Large' },
+      { id: 'mistral-small-latest', name: 'Mistral Small' },
+      { id: 'codestral-latest', name: 'Codestral' },
     ],
   },
 ];
@@ -127,9 +136,8 @@ export default function SettingsPage() {
   const [llmTesting, setLlmTesting] = useState(false);
   const [llmTestError, setLlmTestError] = useState<string | null>(null);
   const [ollamaDiscoveredModels, setOllamaDiscoveredModels] = useState<string[]>([]);
+  const [cloudDiscoveredModels, setCloudDiscoveredModels] = useState<Array<{ id: string; name: string }>>([]);
   const [ollamaCorsOpen, setOllamaCorsOpen] = useState(false);
-  const [llamacppDiscoveredModels, setLlamacppDiscoveredModels] = useState<string[]>([]);
-  const [llamacppDiscovering, setLlamacppDiscovering] = useState(false);
 
   // Populate form from loaded config
   useEffect(() => {
@@ -170,20 +178,25 @@ export default function SettingsPage() {
       .catch(() => {});
   }, [llmProvider, llmBaseUrl]);
 
-  // Handler to manually discover llamacpp models via the Discover button
-  const handleDiscoverLlamaCppModels = () => {
-    setLlamacppDiscovering(true);
-    fetchLlamaCppModels(llmBaseUrl || undefined)
+  // Discover cloud models when configured
+  useEffect(() => {
+    if (!llmConfigured || llmProvider === 'ollama') return;
+    
+    // Clear previous if provider changed
+    setCloudDiscoveredModels([]);
+    
+    fetchLlmModels({ 
+      provider: llmProvider, 
+      apiKey: llmApiKey || undefined, 
+      baseUrl: llmBaseUrl || undefined 
+    })
       .then((r) => {
-        const names = r.models.map((m) => m.id);
-        setLlamacppDiscoveredModels(names);
-        if (names.length > 0 && !llmModel) {
-          setLlmModel(names[0]);
+        if (r.models && r.models.length > 0) {
+          setCloudDiscoveredModels(r.models);
         }
       })
-      .catch(() => {})
-      .finally(() => setLlamacppDiscovering(false));
-  };
+      .catch(() => {});
+  }, [llmConfigured, llmProvider, llmApiKey, llmBaseUrl]);
 
   const handleProviderChange = (provider: LLMProvider) => {
     setLlmProvider(provider);
@@ -457,36 +470,6 @@ export default function SettingsPage() {
                   ) : null;
                 })()}
               </div>
-            ) : llmProvider === 'llamacpp' ? (
-              <div className="mt-1 space-y-2">
-                <Input
-                  value={llmModel}
-                  onChange={(e) => setLlmModel(e.target.value)}
-                  placeholder="Type any model name (e.g. gemma-4-12b)"
-                />
-                {(() => {
-                  const hardcoded =
-                    PROVIDERS.find((p) => p.id === 'llamacpp')?.models.map((m) => m.id) ?? [];
-                  const suggestions = [...new Set([...hardcoded, ...llamacppDiscoveredModels])];
-                  return suggestions.length > 0 ? (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Suggestions:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {suggestions.map((name) => (
-                          <button
-                            key={name}
-                            type="button"
-                            onClick={() => setLlmModel(name)}
-                            className="text-xs px-2 py-0.5 rounded-md border border-border bg-muted hover:bg-accent hover:text-accent-foreground transition-colors"
-                          >
-                            {name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null;
-                })()}
-              </div>
             ) : (
               <div className="mt-1 space-y-2">
                 <Select value={llmModel} onValueChange={setLlmModel}>
@@ -494,13 +477,16 @@ export default function SettingsPage() {
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PROVIDERS.find((p) => p.id === llmProvider)?.models.map((model) => (
+                    {(cloudDiscoveredModels.length > 0
+                      ? cloudDiscoveredModels
+                      : PROVIDERS.find((p) => p.id === llmProvider)?.models || []
+                    ).map((model) => (
                       <SelectItem key={model.id} value={model.id}>
                         <div className="flex items-center justify-between gap-2">
                           <span>{model.name}</span>
-                          {model.description && (
+                          {'description' in model && (model as any).description && (
                             <span className="text-xs text-muted-foreground">
-                              {model.description}
+                              {(model as any).description}
                             </span>
                           )}
                         </div>
@@ -559,46 +545,6 @@ export default function SettingsPage() {
                   {PROVIDERS.find((p) => p.id === llmProvider)?.name}
                 </a>
               </p>
-            </div>
-          )}
-
-          {/* llama.cpp: Base URL + model discovery button */}
-          {llmProvider === 'llamacpp' && (
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">Base URL (optional)</label>
-                <Input
-                  value={llmBaseUrl}
-                  onChange={(e) => setLlmBaseUrl(e.target.value)}
-                  placeholder="http://localhost:8080"
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Leave empty for default (localhost:8080). Start llama-server with:{' '}
-                  <code className="bg-muted px-0.5 rounded">llama-server -m &lt;model.gguf&gt;</code>
-                </p>
-              </div>
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDiscoverLlamaCppModels}
-                  disabled={llamacppDiscovering}
-                >
-                  {llamacppDiscovering ? (
-                    <>
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                      Discovering...
-                    </>
-                  ) : (
-                    'Discover Loaded Model'
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Queries the running llama-server instance to detect the currently loaded model.
-                </p>
-              </div>
             </div>
           )}
 
