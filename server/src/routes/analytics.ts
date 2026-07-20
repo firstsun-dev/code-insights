@@ -1,7 +1,28 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
+import { ErrorSchema } from '../schemas/common.js';
+import {
+  RangeQuerySchema,
+  CacheBySourceQuerySchema,
+  DashboardResponseSchema,
+  DashboardStatsSchema,
+  DailyResponseSchema,
+  UsageResponseSchema,
+  UsageStatsSchema,
+  CacheBySourceResponseSchema,
+} from '../schemas/analytics.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// `range` is intentionally typed as a plain optional string in the query schema
+// (see schemas/analytics.ts) rather than a zod enum — every handler below
+// validates it manually against VALID_RANGES so it can return the existing
+// custom error message ("Invalid range. Must be one of: ...") instead of the
+// generic defaultHook message.
 
 const VALID_RANGES = ['7d', '30d', '90d', 'all'] as const;
 type Range = typeof VALID_RANGES[number];
@@ -15,7 +36,23 @@ function periodStartFor(range: string): string | null {
 }
 
 // Dashboard overview stats for a given time range (e.g. ?range=7d|30d|90d|all)
-app.get('/dashboard', (c) => {
+const dashboardRoute = createRoute({
+  method: 'get',
+  path: '/dashboard',
+  request: { query: RangeQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DashboardResponseSchema } },
+      description: 'Dashboard overview stats',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid range',
+    },
+  },
+});
+
+app.openapi(dashboardRoute, (c) => {
   const db = getDb();
   const { range = '7d', homeId } = c.req.query();
 
@@ -55,15 +92,31 @@ app.get('/dashboard', (c) => {
       SUM(cache_read_tokens) AS cache_read_tokens,
       SUM(estimated_cost_usd) AS estimated_cost_usd
     FROM sessions ${where}
-  `).get(...params);
+  `).get(...params) as z.infer<typeof DashboardStatsSchema>;
 
-  return c.json({ range, stats });
+  return c.json({ range, stats }, 200);
 });
 
 // Daily session/insight counts for the activity chart, aggregated entirely
 // server-side (no row cap) so 'all' range genuinely covers full history
 // regardless of total session count.
-app.get('/daily', (c) => {
+const dailyRoute = createRoute({
+  method: 'get',
+  path: '/daily',
+  request: { query: RangeQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DailyResponseSchema } },
+      description: 'Daily session/insight counts',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid range',
+    },
+  },
+});
+
+app.openapi(dailyRoute, (c) => {
   const db = getDb();
   const { range = '7d', homeId } = c.req.query();
 
@@ -126,22 +179,49 @@ app.get('/daily', (c) => {
       insight_count: counts.insight_count,
     }));
 
-  return c.json({ range, daily });
+  return c.json({ range, daily }, 200);
 });
 
 // Global cumulative usage stats
-app.get('/usage', (c) => {
+const usageRoute = createRoute({
+  method: 'get',
+  path: '/usage',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: UsageResponseSchema } },
+      description: 'Global cumulative usage stats',
+    },
+  },
+});
+
+app.openapi(usageRoute, (c) => {
   const db = getDb();
   const stats = db.prepare(`
     SELECT total_input_tokens, total_output_tokens, cache_creation_tokens,
            cache_read_tokens, estimated_cost_usd, sessions_with_usage, last_updated_at
     FROM usage_stats WHERE id = 1
-  `).get();
-  return c.json({ stats: stats ?? null });
+  `).get() as z.infer<typeof UsageStatsSchema> | undefined;
+  return c.json({ stats: stats ?? null }, 200);
 });
 
 // Cache tokens aggregated by source_tool
-app.get('/cache-by-source', (c) => {
+const cacheBySourceRoute = createRoute({
+  method: 'get',
+  path: '/cache-by-source',
+  request: { query: CacheBySourceQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: CacheBySourceResponseSchema } },
+      description: 'Cache tokens aggregated by source tool',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid range',
+    },
+  },
+});
+
+app.openapi(cacheBySourceRoute, (c) => {
   const db = getDb();
   const { range = '7d', homeId, source } = c.req.query();
 
@@ -197,7 +277,7 @@ app.get('/cache-by-source', (c) => {
       cacheCreationTokens: r.cache_creation_tokens,
       cacheReadTokens: r.cache_read_tokens,
     })),
-  });
+  }, 200);
 });
 
 export default app;

@@ -1,10 +1,11 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { existsSync, readFileSync } from 'fs';
 import { relative, join } from 'path';
 import { openUrl } from '@code-insights/cli/utils/browser';
 import { shutdownTelemetry } from '@code-insights/cli/utils/telemetry';
+import { registerDocs } from './docs.js';
 import projectsRouter from './routes/projects.js';
 import searchRouter from './routes/search.js';
 import sessionsRouter from './routes/sessions.js';
@@ -33,8 +34,8 @@ export interface ServerOptions {
  * Does NOT add static file serving or call serve() — that's startServer's job.
  * Exported so tests can use app.request() without starting a real server.
  */
-export function createApp(): Hono {
-  const app = new Hono();
+export function createApp(): OpenAPIHono {
+  const app = new OpenAPIHono();
 
   // Global error handler — prevents stack trace leakage to clients.
   // Detects malformed JSON bodies (SyntaxError) and returns 400 instead of 500.
@@ -63,8 +64,28 @@ export function createApp(): Hono {
   app.route('/api/dispatch', dispatchRouter);
   app.route('/api/homes', homesRouter);
 
-  // Health check
-  app.get('/api/health', (c) => c.json({ ok: true, version: '0.1.0' }));
+  // Health check — first route migrated to app.openapi() as the worked example
+  // for the rest of the routers.
+  const healthRoute = createRoute({
+    method: 'get',
+    path: '/api/health',
+    responses: {
+      200: {
+        content: {
+          'application/json': {
+            schema: z.object({ ok: z.boolean(), version: z.string() }),
+          },
+        },
+        description: 'Server is healthy',
+      },
+    },
+  });
+  app.openapi(healthRoute, (c) => c.json({ ok: true, version: '0.1.0' }));
+
+  // OpenAPI spec (/api/openapi.json) + self-hosted Swagger UI (/api/docs).
+  // Must be registered AFTER all app.route(...) mounts above (so their routes are
+  // captured in the generated spec) and BEFORE the /api/* 404 catch-all below.
+  registerDocs(app);
 
   // API 404 catch-all — must come AFTER all /api sub-routers and BEFORE static serving.
   // Without this, unmatched /api/* routes fall through to the SPA fallback and return

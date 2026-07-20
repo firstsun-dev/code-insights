@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '@code-insights/cli/db/client';
 import { trackEvent } from '@code-insights/cli/utils/telemetry';
@@ -8,6 +8,8 @@ import { formatAgentRules } from '../export/agent-rules.js';
 import type { SessionRow, InsightRow } from '../export/knowledge-base.js';
 import { createLLMClient, loadLLMConfig } from '../llm/client.js';
 import { requireLLM } from './route-helpers.js';
+import { ErrorSchema } from '../schemas/common.js';
+import { ExportGenerateResponseSchema } from '../schemas/export.js';
 import {
   applyDepthCap,
   buildInsightContext,
@@ -19,7 +21,25 @@ import {
   type ExportInsightRow,
 } from '../llm/export-prompts.js';
 
-const app = new Hono();
+const app = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) return c.json({ error: 'Invalid request' }, 400);
+  },
+});
+
+// POST bodies for /markdown and /generate are intentionally NOT wired into
+// createRoute()'s `request.body` — both handlers perform extensive field-by-
+// field validation with custom error messages (e.g. "format must be one of:
+// agent-rules, knowledge-brief, obsidian, notion", "dateFrom must be before or
+// equal to dateTo"), which a zod body schema + defaultHook would collapse into
+// the generic "Invalid request" message.
+//
+// GET /generate/stream is an SSE endpoint (streamSSE) — it returns a raw
+// streamed Response that doesn't fit a single JSON response schema, so it
+// stays as a plain app.get() route on this OpenAPIHono instance rather than
+// app.openapi(), same as the SSE endpoints in analysis.ts, facets.ts, and
+// reflect.ts. Its query-param validation (same custom messages as /generate)
+// is preserved as-is.
 
 // Date validation helper for YYYY-MM-DD format
 function validateDateString(dateStr: string): boolean {
@@ -53,7 +73,22 @@ function fetchInsightsForSessions(db: ReturnType<typeof getDb>, sessionIds: stri
 }
 
 // POST /api/export/markdown — export sessions/insights as markdown
-app.post('/markdown', async (c) => {
+const markdownRoute = createRoute({
+  method: 'post',
+  path: '/markdown',
+  responses: {
+    200: {
+      content: { 'text/markdown': { schema: z.string() } },
+      description: 'Markdown export of the selected sessions/insights',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid template or sessionIds',
+    },
+  },
+});
+
+app.openapi(markdownRoute, async (c) => {
   const db = getDb();
   const body = await c.req.json<{
     sessionIds?: string[];
@@ -261,8 +296,27 @@ function fetchSessionContext(
 
 // POST /api/export/generate
 // Synchronous LLM export — returns full result when complete.
-app.post('/generate', requireLLM(), async (c) => {
+const generateRoute = createRoute({
+  method: 'post',
+  path: '/generate',
+  middleware: [requireLLM()] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: ExportGenerateResponseSchema } },
+      description: 'LLM export generated successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'LLM not configured, or invalid scope/format/depth/date range',
+    },
+    422: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Export cancelled or generation failed',
+    },
+  },
+});
 
+app.openapi(generateRoute, async (c) => {
   const body = await c.req.json<ExportGenerateBody>();
   const { scope, projectId, format, depth = 'standard', dateFrom, dateTo } = body;
 
@@ -369,7 +423,6 @@ app.post('/generate', requireLLM(), async (c) => {
 // onProgress is implicit (no chunked analysis here); stream.writeSSE is fire-and-forget
 // for progress events (non-fatal if missed).
 app.get('/generate/stream', requireLLM(), async (c) => {
-
   const scope = c.req.query('scope') as ExportScope | undefined;
   const projectId = c.req.query('projectId');
   const format = c.req.query('format') as ExportFormat | undefined;
