@@ -34,8 +34,9 @@ app.get('/', (c) => {
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
   const source = c.req.query('source');
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project, source);
+  const { where, params } = buildWhereClause(period, project, source, homeId);
 
   // Total sessions in scope
   const totalRow = db.prepare(
@@ -65,9 +66,10 @@ app.get('/aggregated', (c) => {
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
   const source = c.req.query('source');
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project, source);
-  const aggregated = getAggregatedData(db, where, params, project, source);
+  const { where, params } = buildWhereClause(period, project, source, homeId);
+  const aggregated = getAggregatedData(db, where, params, project, source, homeId);
 
   return c.json(aggregated);
 });
@@ -128,8 +130,9 @@ app.get('/outdated', (c) => {
   const db = getDb();
   const project = c.req.query('project');
   const period = c.req.query('period') || '30d';
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project);
+  const { where, params } = buildWhereClause(period, project, undefined, homeId);
 
   // UNION of two subqueries — each finds session_ids with a specific outdated signal.
   // UNION (not UNION ALL) deduplicates sessions that fail both checks.
@@ -192,8 +195,9 @@ app.get('/missing-pq', (c) => {
   const period = c.req.query('period') || 'all';
   const project = c.req.query('project');
   const source = c.req.query('source');
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project, source);
+  const { where, params } = buildWhereClause(period, project, source, homeId);
 
   // Sessions with a non-PQ insight but no prompt_quality insight row.
   const rows = db.prepare(`
@@ -221,8 +225,9 @@ app.get('/outdated-pq', (c) => {
   const period = c.req.query('period') || 'all';
   const project = c.req.query('project');
   const source = c.req.query('source');
+  const homeId = c.req.query('homeId');
 
-  const { where, params } = buildWhereClause(period, project, source);
+  const { where, params } = buildWhereClause(period, project, source, homeId);
 
   // PQ insights where metadata lacks the findings array (old schema).
   const rows = db.prepare(`
