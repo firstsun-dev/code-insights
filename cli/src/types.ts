@@ -330,6 +330,54 @@ export interface WorkingStyleResult {
 
 export type ReflectResult = FrictionWinsResult | RulesSkillsResult | WorkingStyleResult;
 
+// === Personality Analysis types ===
+// Standalone type — deliberately NOT a member of the ReflectResult union and NOT an
+// extension of WorkingStyleResult. See docs/ARCHITECTURE.md / PR description for the
+// architecture rationale: the reflect_snapshots write path does a full-blob overwrite
+// per section, which would silently clobber a shared row if personality shared that table.
+
+export type PersonalityTraitKey = 'precision' | 'resilience' | 'autonomy' | 'craft';
+
+export interface PersonalityTrait {
+  key: PersonalityTraitKey;
+  score: number | null;      // 0-100 normalized; null = insufficient data
+  band?: 'low' | 'moderate' | 'high';
+  sampleSize: number;         // contributing facets/insights; 0 = insufficient data
+}
+
+export interface PersonalityBipolarAxis {
+  key: 'explorer_executor';
+  value: number | null;       // -100 (fully Explorer) .. +100 (fully Executor); null = insufficient data
+  sampleSize: number;
+}
+
+export interface PersonalityPace {
+  value: number | null;       // 0 = deliberate .. 100 = rapid
+  sampleSize: number;
+}
+
+export interface PersonalityArchetype {   // LLM-generated prose only; entirely optional
+  tagline?: string;           // <=40 chars
+  tagline_subtitle?: string;  // <=80 chars — naming matches WorkingStyleResult.tagline_subtitle
+  narrative: string;
+  strengths: string[];
+  growthAreas: string[];
+}
+
+export interface PersonalityProfile {
+  profileVersion: 1;
+  traits: PersonalityTrait[];        // precision, resilience, autonomy, craft
+  axis: PersonalityBipolarAxis;      // explorer_executor
+  pace: PersonalityPace;
+  archetype?: PersonalityArchetype;
+  computedAt: string;                 // ISO 8601
+  analysisVersion: string;            // rule-scoring formula version string, start at '1.0.0'
+  sessionCount: number;
+  facetCount: number;
+  period: string;                     // ISO week string, e.g. '2026-W29'
+  projectId: string;                  // '__all__' for global
+}
+
 export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'llamacpp' | 'openai-compatible';
 
 export interface LLMProviderConfig {
