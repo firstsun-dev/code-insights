@@ -66,6 +66,18 @@ export interface Session {
   compact_count: number;
   auto_compact_count: number;
   slash_commands: string | null; // JSON-encoded string[] — decode with parseJsonField<string[]>(x, [])
+  facets?: {
+    session_id: string;
+    outcome_satisfaction: string;
+    workflow_pattern: string | null;
+    had_course_correction: number;
+    course_correction_reason: string | null;
+    iteration_count: number;
+    friction_points: string;     // JSON string
+    effective_patterns: string;  // JSON string
+    extracted_at: string;
+    analysis_version: string;
+  } | null;
 }
 
 export type InsightType = 'summary' | 'decision' | 'learning' | 'technique' | 'prompt_quality';
@@ -200,6 +212,11 @@ export interface InsightMetadata {
     why?: string;
     what_worked?: string;
     why_effective?: string;
+    sfl_breakdown?: {
+      ideational: string;
+      interpersonal: string;
+      textual: string;
+    };
   }>;
   findings?: Array<{
     category: string;
@@ -209,6 +226,11 @@ export interface InsightMetadata {
     impact: 'high' | 'medium' | 'low';
     confidence: number;
     suggested_improvement?: string;
+    sfl_breakdown?: {
+      ideational: string;
+      interpersonal: string;
+      textual: string;
+    };
   }>;
   dimension_scores?: {
     context_provision: number;
@@ -262,10 +284,48 @@ export interface DispatchPrefill {
   contextMarkdown: string;
 }
 
+// ── Dispatch (LLM-powered post generation) ────────────────────────────────────
+
+export type DispatchTone = 'technical' | 'accessible' | 'quick-tips';
+export type DispatchFormat = 'blog' | 'linkedin';
+
+export interface DispatchRequest {
+  insightIds: string[];
+  context: string;
+  tone: DispatchTone;
+  format: DispatchFormat;
+  includeSessionBackground?: boolean;
+}
+
+export interface DispatchResponse {
+  markdown: string;
+  body: string;
+  format: DispatchFormat;
+  frontmatter: { title: string; tags: string[]; tldr: string };
+  wordCount: number;
+  characterCount: number;
+  degraded: boolean;
+  model: string;
+  tokensUsed: { input: number; output: number };
+}
+
+export interface DispatchImagePromptRequest {
+  title: string;
+  tags: string[];
+  tldr: string;
+  format: DispatchFormat;
+}
+
+export interface DispatchImagePromptResponse {
+  prompt: string;
+  model: string;
+  tokensUsed: { input: number; output: number };
+}
+
 // LLM config from /api/config/llm
 export interface LLMConfig {
   dashboardPort: number;
-  provider?: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'llamacpp';
+  provider?: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'llamacpp' | 'openai-compatible';
   model?: string;
   apiKey?: string;      // masked by server before returning (first4...last4)
   baseUrl?: string;

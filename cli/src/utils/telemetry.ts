@@ -27,6 +27,7 @@ export type TelemetryEventName =
   | 'cli_install_hook'
   | 'cli_status'
   | 'cli_open'
+  | 'cli_embeddings'
   | 'analysis_run'
   | 'insight_generated'
   | 'export_run'

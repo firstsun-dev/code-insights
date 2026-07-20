@@ -2,18 +2,279 @@
 // Extracted from prompts.ts — handles JSON extraction, repair, and validation.
 
 import { jsonrepair } from 'jsonrepair';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import type { AnalysisResponse, ParseError, ParseResult, PromptQualityResponse, PromptQualityDimensionScores } from './prompt-types.js';
 
-function buildResponsePreview(text: string, head = 200, tail = 200): string {
+function buildResponsePreview(text: string, head = 500, tail = 500): string {
   if (text.length <= head + tail + 20) return text;
   return `${text.slice(0, head)}\n...[${text.length - head - tail} chars omitted]...\n${text.slice(-tail)}`;
 }
 
 export function extractJsonPayload(response: string): string | null {
+  // 1. Tagged content (preferred)
   const tagged = response.match(/<json>\s*([\s\S]*?)\s*<\/json>/i);
   if (tagged?.[1]) return tagged[1].trim();
-  const jsonMatch = response.match(/\{[\s\S]*\}/);
-  return jsonMatch ? jsonMatch[0] : null;
+
+  // 2. Markdown code blocks (common LLM output)
+  const codeBlock = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlock?.[1]) return codeBlock[1].trim();
+
+  // 3. Look for the largest balanced { ... } block.
+  let bestBlock: string | null = null;
+  let firstBrace = response.indexOf('{');
+
+  while (firstBrace !== -1) {
+    let depth = 0;
+    let inQuote = false;
+    let escaped = false;
+
+    for (let i = firstBrace; i < response.length; i++) {
+      const char = response[i];
+      if (escaped) { escaped = false; continue; }
+      if (char === '\\') { escaped = true; continue; }
+      if (char === '"') { inQuote = !inQuote; continue; }
+
+      if (!inQuote) {
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            const block = response.slice(firstBrace, i + 1);
+            if (!bestBlock || block.length > bestBlock.length) {
+              bestBlock = block;
+            }
+            break;
+          }
+        }
+      }
+    }
+    firstBrace = response.indexOf('{', firstBrace + 1);
+  }
+
+  if (bestBlock) return bestBlock;
+
+  // 4. Truncated fallback: find the first { and return everything from there.
+  const startIdx = response.indexOf('{');
+  if (startIdx !== -1) {
+    return response.slice(startIdx);
+  }
+
+  return null;
+}
+
+/**
+ * Pre-process JSON string from LLM before parsing.
+ * Handles common LLM errors:
+ * 1. Unescaped double quotes inside string values (especially in code blocks).
+ * 2. Literal newlines in strings (invalid in JSON).
+ * 3. Escaped backslashes misidentifying following characters.
+ */
+export function preProcessJson(json: string): string {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+  let lastSignificantChar = '';
+
+  // Helper to check if a quote at a given position is likely an end-delimiter
+  // based on what follows it in the JSON structure.
+  const isLikelyEndQuote = (pos: number): boolean => {
+    let nextIdx = -1;
+    let nextChar = '';
+    for (let j = pos + 1; j < json.length; j++) {
+      if (!/\s/.test(json[j])) {
+        nextIdx = j;
+        nextChar = json[j];
+        break;
+      }
+    }
+
+    if (nextIdx === -1) return true; // End of input
+
+    if (nextChar === ':') {
+      // If followed by a colon, this is an end quote ONLY if we are defining a key.
+      // We are defining a key if the last significant char was { or ,
+      return ['{', ','].includes(lastSignificantChar);
+    }
+
+    if (nextChar === '}') {
+      // If we see a }, it's only an end quote if we were finishing an object value.
+      if (lastSignificantChar !== ':') return false;
+
+      // Verify by checking what follows the }.
+      let afterBraceIdx = -1;
+      let afterBraceChar = '';
+      for (let m = nextIdx + 1; m < json.length; m++) {
+        if (!/\s/.test(json[m])) {
+          afterBraceIdx = m;
+          afterBraceChar = json[m];
+          break;
+        }
+      }
+      // Valid structural chars after a closing object brace: , } ] or end of input
+      return afterBraceIdx === -1 || [',', '}', ']'].includes(afterBraceChar);
+    }
+
+    if (nextChar === ']') {
+      // If we see a ], it's only an end quote if we were in an array.
+      if (!['[', ','].includes(lastSignificantChar)) return false;
+
+      // Verify by checking what follows the ].
+      let afterBracketIdx = -1;
+      let afterBracketChar = '';
+      for (let m = nextIdx + 1; m < json.length; m++) {
+        if (!/\s/.test(json[m])) {
+          afterBracketIdx = m;
+          afterBracketChar = json[m];
+          break;
+        }
+      }
+      return afterBracketIdx === -1 || [',', '}', ']'].includes(afterBracketChar);
+    }
+
+    if (nextChar === ',') {
+      // If followed by a comma, it's only an end quote if the NEXT non-whitespace
+      // thing after the comma looks like the start of a new key or structural element.
+      let afterCommaIdx = -1;
+      let afterCommaChar = '';
+      for (let m = nextIdx + 1; m < json.length; m++) {
+        if (!/\s/.test(json[m])) {
+          afterCommaIdx = m;
+          afterCommaChar = json[m];
+          break;
+        }
+      }
+
+      if (afterCommaIdx === -1) return true; // Trailing comma
+
+      if (lastSignificantChar === ':') {
+        // We are currently in a property value. A comma here MUST be followed by a new key.
+        if (afterCommaChar === '"') {
+          // Find the end of this next string and see if a colon follows it.
+          let k = afterCommaIdx + 1;
+          let subEscaped = false;
+          while (k < json.length) {
+            const c = json[k];
+            if (subEscaped) {
+              subEscaped = false;
+            } else if (c === '\\') {
+              subEscaped = true;
+            } else if (c === '"') {
+              break;
+            }
+            k++;
+          }
+          if (k >= json.length) return true; // Truncated but likely a key
+          // Check for colon after the string
+          let afterKeyIdx = -1;
+          for (let n = k + 1; n < json.length; n++) {
+            if (!/\s/.test(json[n])) {
+              afterKeyIdx = n;
+              break;
+            }
+          }
+          // If it's a key, it MUST be followed by a colon.
+          return afterKeyIdx !== -1 && json[afterKeyIdx] === ':';
+        }
+        // Other valid starts after a property value: } or ] (though usually preceded by comma is invalid JSON, we allow it)
+        return ['}', ']'].includes(afterCommaChar);
+      }
+
+      // We are in an array. Comma is always a valid delimiter between elements.
+      if (['[', ','].includes(lastSignificantChar)) return true;
+
+      return false;
+    }
+
+    return false;
+  };
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+
+    if (escaped) {
+      if ((char === '\n' || char === '\r') && inString) {
+        result += '\\n';
+      } else {
+        result += char;
+      }
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    // Handle literal newlines in strings
+    if ((char === '\n' || char === '\r') && inString) {
+      result += '\\n';
+      if (char === '\r' && json[i + 1] === '\n') {
+        i++;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      if (inString) {
+        if (isLikelyEndQuote(i)) {
+          inString = false;
+          result += char;
+          lastSignificantChar = '"';
+        } else {
+          // Nested quote! Escape it.
+          result += '\\"';
+        }
+      } else {
+        inString = true;
+        result += char;
+      }
+    } else {
+      result += char;
+      if (!inString && !/\s/.test(char)) {
+        lastSignificantChar = char;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Log context around an error position and save full failed payload to a debug folder.
+ */
+function logParseErrorWithContext(json: string, err: unknown, contextName: string, rawResponse: string): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  const position = (err as any)?.position;
+
+  // Save to debug folder
+  try {
+    const debugDir = join(homedir(), '.code-insights', 'debug');
+    mkdirSync(debugDir, { recursive: true });
+    const filename = `failed-${contextName}-${Date.now()}.json.txt`;
+    const fullPath = join(debugDir, filename);
+    writeFileSync(fullPath, `--- ERROR ---\n${msg}\n\n--- PRE-PROCESSED JSON ---\n${json}\n\n--- RAW RESPONSE ---\n${rawResponse}`);
+    console.error(`[debug] Full failed payload saved to ${fullPath}`);
+  } catch (saveErr) {
+    console.warn('[debug] Failed to save debug payload:', saveErr);
+  }
+
+  if (typeof position === 'number') {
+    const start = Math.max(0, position - 50);
+    const end = Math.min(json.length, position + 50);
+    const context = json.slice(start, end);
+    const pointer = ' '.repeat(Math.min(position, 50)) + '^';
+    console.error(`Failed to parse ${contextName} response (after jsonrepair): ${msg}`);
+    console.error(`Context around position ${position}:`);
+    console.error(context);
+    console.error(pointer);
+  } else {
+    console.error(`Failed to parse ${contextName} response (after jsonrepair):`, err);
+  }
 }
 
 /**
@@ -21,7 +282,6 @@ export function extractJsonPayload(response: string): string | null {
  */
 export function parseAnalysisResponse(response: string): ParseResult<AnalysisResponse> {
   const response_length = response.length;
-
   const preview = buildResponsePreview(response);
 
   const jsonPayload = extractJsonPayload(response);
@@ -33,21 +293,29 @@ export function parseAnalysisResponse(response: string): ParseResult<AnalysisRes
     };
   }
 
+  const preProcessed = preProcessJson(jsonPayload);
+
   let parsed: AnalysisResponse;
   try {
-    parsed = JSON.parse(jsonPayload) as AnalysisResponse;
+    parsed = JSON.parse(preProcessed) as AnalysisResponse;
   } catch {
     // Attempt repair — handles trailing commas, unclosed braces, truncated output
     try {
-      parsed = JSON.parse(jsonrepair(jsonPayload)) as AnalysisResponse;
+      const repaired = jsonrepair(preProcessed);
+      parsed = JSON.parse(repaired) as AnalysisResponse;
     } catch (err) {
+      logParseErrorWithContext(preProcessed, err, 'analysis', response);
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('Failed to parse analysis response (after jsonrepair):', err);
+
       return {
         success: false,
         error: { error_type: 'json_parse_error', error_message: msg, response_length, response_preview: preview },
       };
     }
+  }
+
+  if (parsed.summary && !parsed.summary.title && parsed.summary.outcome === 'abandoned') {
+    parsed.summary.title = 'Session abandoned (no interaction)';
   }
 
   if (!parsed.summary || typeof parsed.summary.title !== 'string') {
@@ -66,8 +334,21 @@ export function parseAnalysisResponse(response: string): ParseResult<AnalysisRes
   // Normalize facet arrays before monitors access .some() — a non-array truthy value
   // (e.g. LLM returns "friction_points": "none") would throw a TypeError on .some().
   if (parsed.facets) {
+    // Required field for DB: outcome_satisfaction (TEXT NOT NULL)
+    if (!parsed.facets.outcome_satisfaction) {
+      console.warn('[analysis-parser] Missing outcome_satisfaction in facets, defaulting to "medium"');
+      parsed.facets.outcome_satisfaction = 'medium';
+    }
+
     if (!Array.isArray(parsed.facets.friction_points)) parsed.facets.friction_points = [];
     if (!Array.isArray(parsed.facets.effective_patterns)) parsed.facets.effective_patterns = [];
+    
+    // Ensure numeric fields have defaults to avoid NULLs in DB
+    parsed.facets.iteration_count = typeof parsed.facets.iteration_count === 'number' 
+      ? parsed.facets.iteration_count 
+      : 0;
+    
+    parsed.facets.had_course_correction = !!parsed.facets.had_course_correction;
   }
 
   // Observability: two-tier tooling-limitation monitor.
@@ -141,15 +422,18 @@ export function parsePromptQualityResponse(response: string): ParseResult<Prompt
     };
   }
 
+  const preProcessed = preProcessJson(jsonPayload);
+
   let parsed: PromptQualityResponse;
   try {
-    parsed = JSON.parse(jsonPayload) as PromptQualityResponse;
+    parsed = JSON.parse(preProcessed) as PromptQualityResponse;
   } catch {
     try {
-      parsed = JSON.parse(jsonrepair(jsonPayload)) as PromptQualityResponse;
+      const repaired = jsonrepair(preProcessed);
+      parsed = JSON.parse(repaired) as PromptQualityResponse;
     } catch (err) {
+      logParseErrorWithContext(preProcessed, err, 'prompt quality', response);
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('Failed to parse prompt quality response (after jsonrepair):', msg);
       return {
         success: false,
         error: { error_type: 'json_parse_error', error_message: msg, response_length, response_preview: preview },

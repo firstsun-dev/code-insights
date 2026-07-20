@@ -1,15 +1,47 @@
 // LLM client factory — server-side.
 // Config is loaded from ~/.code-insights/config.json via the CLI config system.
+// API keys are resolved from environment variables first, then session-only stored keys.
 // No localStorage or browser APIs used here.
 
 import { loadConfig } from '@code-insights/cli/utils/config';
 import type { LLMClient } from './types.js';
-import type { LLMProviderConfig } from './types.js';
+import type { LLMProviderConfig, LLMProvider } from './types.js';
 import { createOpenAIClient } from './providers/openai.js';
 import { createAnthropicClient } from './providers/anthropic.js';
 import { createGeminiClient } from './providers/gemini.js';
 import { createOllamaClient } from './providers/ollama.js';
-import { createLlamaCppClient } from './providers/llamacpp.js';
+import { createOpenRouterClient } from './providers/openrouter.js';
+import { createMistralClient } from './providers/mistral.js';
+import { setRateLimiter, getRateLimiter, resetRateLimiter } from './rate_limiter.js';
+
+/**
+ * Mapping from provider ID to its standard API key environment variable.
+ */
+const PROVIDER_API_KEY_ENV: Record<string, string> = {
+  openai:     'OPENAI_API_KEY',
+  anthropic:  'ANTHROPIC_API_KEY',
+  gemini:     'GEMINI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  mistral:    'MISTRAL_API_KEY',
+};
+
+/**
+ * Resolve the API key for a provider.
+ *
+ * Priority:
+ *  1. Environment variable (e.g. OPENAI_API_KEY) — always checked first
+ *  2. Previously-stored session key (passed as `storedKey`) — kept in memory only,
+ *     never written to disk by saveConfig
+ *  3. undefined — ollama does not use API keys
+ */
+function resolveApiKey(provider: LLMProvider, storedKey?: string): string | undefined {
+  if (provider === 'ollama') return undefined;
+  const envVar = PROVIDER_API_KEY_ENV[provider];
+  if (envVar && process.env[envVar]) {
+    return process.env[envVar];
+  }
+  return storedKey;
+}
 
 /**
  * Load LLM config from the CLI config file.
@@ -25,9 +57,22 @@ export function loadLLMConfig(): LLMProviderConfig | null {
 export function isLLMConfigured(): boolean {
   const llm = loadLLMConfig();
   if (!llm) return false;
-  // Local providers: no API key required — configured if a model is set
-  if (llm.provider === 'ollama' || llm.provider === 'llamacpp') return !!llm.model;
-  return !!llm.apiKey && !!llm.model;
+  if (llm.provider === 'ollama') return !!llm.model;
+  return !!resolveApiKey(llm.provider, llm.apiKey) && !!llm.model;
+}
+
+/**
+ * Initialize rate limiter from CLI config.
+ * Creates a rate limiter only if RPM is configured at valid levels (2-4).
+ */
+export function initRateLimiterFromConfig(): void {
+  const config = loadLLMConfig();
+  if (config?.rateLimit?.rpm) {
+    const rpm = config.rateLimit.rpm;
+    if (rpm >= 2 && rpm <= 4) {
+      setRateLimiter(rpm);
+    }
+  }
 }
 
 /**
@@ -46,17 +91,28 @@ export function createLLMClient(): LLMClient {
  * Create an LLM client from a specific config object (used for testing).
  */
 export function createClientFromConfig(config: LLMProviderConfig): LLMClient {
+  const apiKey = resolveApiKey(config.provider, config.apiKey);
+  
+  // Initialize rate limiter from config if not already set
+  if (config.rateLimit?.rpm) {
+    setRateLimiter(config.rateLimit.rpm);
+  }
+  
   switch (config.provider) {
     case 'openai':
-      return createOpenAIClient(config.apiKey ?? '', config.model);
+      return createOpenAIClient(apiKey ?? '', config.model, config.baseUrl);
     case 'anthropic':
-      return createAnthropicClient(config.apiKey ?? '', config.model);
+      return createAnthropicClient(apiKey ?? '', config.model);
     case 'gemini':
-      return createGeminiClient(config.apiKey ?? '', config.model);
+      return createGeminiClient(apiKey ?? '', config.model);
     case 'ollama':
       return createOllamaClient(config.model, config.baseUrl);
-    case 'llamacpp':
-      return createLlamaCppClient(config.model, config.baseUrl);
+    case 'openrouter':
+      return createOpenRouterClient(apiKey ?? '', config.model);
+    case 'mistral':
+      return createMistralClient(apiKey ?? '', config.model);
+    case 'openai-compatible':
+      return createOpenAIClient(apiKey ?? '', config.model, config.baseUrl);
     default:
       throw new Error(`Unknown LLM provider: ${config.provider}`);
   }
@@ -68,7 +124,7 @@ export function createClientFromConfig(config: LLMProviderConfig): LLMClient {
 export async function testLLMConfig(config: LLMProviderConfig): Promise<{ success: boolean; error?: string }> {
   try {
     const client = createClientFromConfig(config);
-    await client.chat([{ role: 'user', content: 'Respond with exactly this JSON and nothing else: {"status":"ok"}' }]);
+    await client.chat([{ role: 'user', content: 'Say "ok" and nothing else.' }]);
     return { success: true };
   } catch (error) {
     return {
@@ -77,3 +133,6 @@ export async function testLLMConfig(config: LLMProviderConfig): Promise<{ succes
     };
   }
 }
+
+// Export rate limiter utilities for testing
+export { getRateLimiter, resetRateLimiter };

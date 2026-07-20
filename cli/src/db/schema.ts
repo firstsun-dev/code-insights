@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   git_branch              TEXT,
   claude_version          TEXT,
   source_tool             TEXT NOT NULL DEFAULT 'claude-code',
+  parent_session_id       TEXT,
+  agent_type              TEXT,
   device_id               TEXT,
   device_hostname         TEXT,
   device_platform         TEXT,
@@ -69,16 +71,18 @@ CREATE INDEX IF NOT EXISTS idx_sessions_source_tool ON sessions(source_tool);
 -- Messages
 -- ============================================================
 CREATE TABLE IF NOT EXISTS messages (
-  id           TEXT PRIMARY KEY,
-  session_id   TEXT NOT NULL REFERENCES sessions(id),
-  type         TEXT NOT NULL,
-  content      TEXT NOT NULL DEFAULT '',
-  thinking     TEXT,
-  tool_calls   TEXT,
-  tool_results TEXT,
-  usage        TEXT,
-  timestamp    TEXT NOT NULL,
-  parent_id    TEXT
+  id               TEXT PRIMARY KEY,
+  session_id       TEXT NOT NULL REFERENCES sessions(id),
+  type             TEXT NOT NULL,
+  content          TEXT NOT NULL DEFAULT '',
+  thinking         TEXT,
+  tool_calls       TEXT,
+  tool_results     TEXT,
+  usage            TEXT,
+  timestamp        TEXT NOT NULL,
+  parent_id        TEXT,
+  embedding_status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(embedding_status IN ('pending', 'computed', 'stale', 'failed'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
@@ -104,7 +108,9 @@ CREATE TABLE IF NOT EXISTS insights (
   created_at         TEXT NOT NULL DEFAULT (datetime('now')),
   scope              TEXT NOT NULL DEFAULT 'session',
   analysis_version   TEXT NOT NULL DEFAULT '1.0.0',
-  linked_insight_ids TEXT
+  linked_insight_ids TEXT,
+  embedding_status   TEXT NOT NULL DEFAULT 'pending'
+    CHECK(embedding_status IN ('pending', 'computed', 'stale', 'failed'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_insights_session_id ON insights(session_id);
@@ -112,6 +118,22 @@ CREATE INDEX IF NOT EXISTS idx_insights_project_id ON insights(project_id);
 CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(type);
 CREATE INDEX IF NOT EXISTS idx_insights_timestamp ON insights(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_insights_confidence_timestamp ON insights(confidence DESC, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_insights_embedding_status ON insights(embedding_status);
+
+-- ============================================================
+-- Embedding metadata (tracks provenance for computed embeddings)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS embedding_metadata (
+  id            TEXT PRIMARY KEY,
+  entity_type   TEXT NOT NULL CHECK(entity_type IN ('insight', 'message')),
+  model         TEXT NOT NULL,
+  dim           INTEGER NOT NULL,
+  source_text   TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_embedding_metadata_type ON embedding_metadata(entity_type);
+CREATE INDEX IF NOT EXISTS idx_embedding_metadata_model ON embedding_metadata(model);
 
 -- ============================================================
 -- Global usage stats (singleton row, updated by CLI sync)
@@ -128,6 +150,6 @@ CREATE TABLE IF NOT EXISTS usage_stats (
 );
 `;
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 export { runMigrations } from './migrate.js';

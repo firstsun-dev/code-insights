@@ -67,6 +67,9 @@ This principle applies to planning, designing, AND implementation:
 | Codex CLI | `codex-cli` | `CodexProvider` | JSONL (rollout files) | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
 | Copilot CLI | `copilot-cli` | `CopilotCliProvider` | JSONL (events) | `~/.copilot/session-state/{id}/events.jsonl` |
 | VS Code Copilot Chat | `copilot` | `CopilotProvider` | JSON | Platform-specific Copilot Chat storage |
+| Crush | `crush` | `CrushProvider` | JSONL | Platform-specific |
+| OpenCode | `opencode` | `OpenCodeProvider` | JSONL | Platform-specific |
+| Hermes Agent | `hermes-agent` | `HermesAgentProvider` | SQLite database | `~/.hermes/state.db` and `~/.hermes/profiles/<profile_name>/state.db` |
 
 ---
 
@@ -77,6 +80,8 @@ cd cli
 pnpm install          # Install dependencies
 pnpm dev              # Watch mode (tsc --watch)
 pnpm build            # Compile TypeScript to dist/
+pnpm test             # Run test suite (vitest)
+pnpm test:watch       # Run tests in watch mode
 
 # After building, link for local testing:
 npm link
@@ -91,7 +96,7 @@ code-insights status                   # Show sync statistics
 code-insights open                     # Open dashboard in browser (no server start)
 code-insights dashboard                # Start server + open dashboard (auto-syncs first)
 code-insights dashboard --no-sync      # Start server + open dashboard without syncing
-code-insights install-hook             # Auto-sync + auto-analysis on session end
+code-insights install-hook             # Install unified session-end hook (auto-sync + background analysis)
 code-insights install-hook --sync-only # Install sync hook only (no analysis)
 code-insights uninstall-hook           # Remove all Code Insights hooks
 code-insights config                   # Show current configuration
@@ -108,8 +113,16 @@ code-insights telemetry enable         # Opt back in
 # Insights — session analysis
 code-insights insights <session_id>              # Analyze using configured LLM
 code-insights insights <session_id> --native     # Analyze using claude -p (no API key needed)
-code-insights insights --hook --native -q        # Hook mode (reads stdin, used by SessionEnd hook)
 code-insights insights check                     # Check for unanalyzed sessions (last 7 days)
+
+# Queue — background analysis management
+code-insights queue status                       # Show queue status with pending/processing counts
+code-insights queue process                      # Process all queued items (manual trigger)
+code-insights queue retry <session_id>           # Retry failed analysis for specific session
+code-insights queue prune                        # Remove completed queue items (cleanup)
+
+# Session-end — hook integration
+code-insights session-end                        # Process session end with background analysis (replaces SessionEnd hook)
 
 # Stats — terminal analytics
 code-insights stats                    # Dashboard overview (last 7 days)
@@ -133,18 +146,39 @@ code-insights stats patterns           # Cross-session patterns summary
 - **Runtime**: Node.js (ES2022, ES Modules)
 - **CLI Framework**: Commander.js
 - **Database**: SQLite (better-sqlite3) — WAL mode, local at `~/.code-insights/data.db`, Schema V9
+- **Storage Strategy**: `ON CONFLICT DO UPDATE` for messages to ensure `--force` sync refreshes content.
 - **Dashboard**: Vite + React 19 SPA
 - **Server**: Hono
 - **UI**: Tailwind CSS 4 + shadcn/ui (New York), Lucide icons
 - **Server State**: React Query (TanStack Query)
 - **Charts**: Recharts 3
-- **LLM**: OpenAI, Anthropic, Gemini, Ollama (multi-provider abstraction)
+- **LLM**: OpenAI, Anthropic, Gemini, Ollama, OpenRouter, Mistral (multi-provider abstraction with environment variable configuration)
 - **Telemetry**: PostHog (opt-out model, enabled by default)
 - **Terminal UI**: Chalk (colors), Ora (spinners), Inquirer (prompts)
-- **Utilities**: date-fns
+- **Utilities**: date-fns, jsonrepair (robust JSON parsing)
 - **Package Manager**: pnpm (workspace monorepo)
 - **npm Package**: `@code-insights/cli`
 - **Binary**: `code-insights`
+
+---
+
+## Environment Configuration
+
+**LLM Provider API Keys** can be configured via environment variables or the interactive config command:
+
+```bash
+# Environment variables (recommended)
+export OPENAI_API_KEY=""
+export ANTHROPIC_API_KEY=""
+export GEMINI_API_KEY=""
+export OPENROUTER_API_KEY=""
+export MISTRAL_API_KEY=""
+
+# Interactive configuration
+code-insights config llm
+```
+
+API keys are resolved in this order: environment variables → configuration file → interactive prompt.
 
 ---
 
@@ -165,6 +199,20 @@ Multi-tier fallback: Claude summary -> user message (scored) -> character-based 
 ### Multi-Source Support
 The CLI and dashboard support sessions from multiple AI coding tools via the `sourceTool` field.
 
-**Supported sources:** `'claude-code'` (default), `'cursor'`, `'codex-cli'`, `'copilot-cli'`, `'copilot'`
+**Supported sources:** `'claude-code'` (default), `'cursor'`, `'codex-cli'`, `'copilot-cli'`, `'copilot'`, `'crush'`, `'opencode'`, `'hermes-agent'`
 
 **Adding a new source tool:** See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the 6-step provider guide.
+
+### OpenCode Multi-Schema Support
+The `OpenCodeProvider` handles two distinct storage formats:
+1. **Legacy**: Individual columns for `role`, `text`, `tool`, etc.
+2. **Modern**: JSON blobs in a `data` column for `message` and `part` tables.
+It also supports `markdown` and `reasoning` part types and extracts usage from `step-finish` events.
+
+### Analysis & Processing Features
+
+- **Background Analysis Queue**: Async session processing with retry logic and dashboard polling for real-time status
+- **Sequential Bulk Analysis**: Process multiple sessions with real-time progress tracking and stop support
+- **Enhanced JSON Parsing**: Robust JSON extraction with `jsonrepair` for handling malformed LLM responses
+- **Prompt Quality Evaluation**: Neutral analytical persona for evaluating prompt effectiveness
+- **Response Normalization**: Comprehensive normalization for friction points, effective patterns, and prompt quality metrics

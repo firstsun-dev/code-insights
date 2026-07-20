@@ -4,6 +4,12 @@ import { CursorProvider } from './cursor.js';
 import { CodexProvider } from './codex.js';
 import { CopilotCliProvider } from './copilot-cli.js';
 import { CopilotProvider } from './copilot.js';
+import { HermesAgentProvider } from './hermes-agent.js';
+import { OpenCodeProvider } from './opencode.js';
+import { KiloProvider } from './kilo.js';
+import { CrushProvider } from './crush.js';
+import { AntigravityProvider } from './antigravity.js';
+import { MistralVibeProvider } from './mistral-vibe.js';
 
 const providers = new Map<string, SessionProvider>();
 
@@ -22,6 +28,24 @@ providers.set(copilotCli.getProviderName(), copilotCli);
 
 const copilot = new CopilotProvider();
 providers.set(copilot.getProviderName(), copilot);
+
+const hermesAgent = new HermesAgentProvider();
+providers.set(hermesAgent.getProviderName(), hermesAgent);
+
+const opencode = new OpenCodeProvider();
+providers.set(opencode.getProviderName(), opencode);
+
+const kilo = new KiloProvider();
+providers.set(kilo.getProviderName(), kilo);
+
+const crush = new CrushProvider();
+providers.set(crush.getProviderName(), crush);
+
+const antigravity = new AntigravityProvider();
+providers.set(antigravity.getProviderName(), antigravity);
+
+const mistralVibe = new MistralVibeProvider();
+providers.set(mistralVibe.getProviderName(), mistralVibe);
 
 /**
  * Get a provider by name
