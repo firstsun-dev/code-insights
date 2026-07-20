@@ -2,7 +2,7 @@
 // Base URL is relative in production (SPA served by the same server).
 // In Vite dev mode, the proxy forwards /api -> localhost:7890.
 
-import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home, PersonalitySnapshot, PersonalityWeekInfo, PersonalitySnapshotResponse, PersonalityWeeksResponse, CacheBySourceRow } from '@/lib/types';
+import type { Project, Session, Message, Insight, DashboardStats, DailyStats, LLMConfig, ExportTemplate, DispatchRequest, DispatchResponse, DispatchImagePromptRequest, DispatchImagePromptResponse, Home, PersonalityProfile, PersonalityTrendResponse, CacheBySourceRow } from '@/lib/types';
 
 const BASE = '/api';
 
@@ -596,22 +596,23 @@ export function generateDispatchImagePrompt(body: DispatchImagePromptRequest) {
 
 // ── Personality Analysis ──────────────────────────────────────────────────────
 
-export function fetchPersonalitySnapshot(params?: {
+export function fetchPersonalityProfile(params?: {
   period?: string;
-  project?: string;
+  projectId?: string;
 }) {
   const q = new URLSearchParams();
   if (params?.period) q.set('period', params.period);
-  if (params?.project) q.set('project', params.project);
+  if (params?.projectId) q.set('projectId', params.projectId);
   const qs = q.toString() ? `?${q.toString()}` : '';
-  return request<PersonalitySnapshotResponse>(`/personality/snapshot${qs}`);
+  return request<PersonalityProfile>(`/personality${qs}`);
 }
 
-export function fetchPersonalityWeeks(params?: { project?: string }) {
+export function fetchPersonalityTrend(params?: { projectId?: string; weeks?: number }) {
   const q = new URLSearchParams();
-  if (params?.project) q.set('project', params.project);
+  if (params?.projectId) q.set('projectId', params.projectId);
+  if (params?.weeks) q.set('weeks', String(params.weeks));
   const qs = q.toString() ? `?${q.toString()}` : '';
-  return request<PersonalityWeeksResponse>(`/personality/weeks${qs}`);
+  return request<PersonalityTrendResponse>(`/personality/trend${qs}`);
 }
 
 export async function personalityGenerateStream(
