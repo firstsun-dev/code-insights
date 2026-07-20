@@ -588,8 +588,8 @@ export class GEPARunner {
       dominatedSolutions: selectedPoint.dominatedSolutions,
     });
 
-    if (result.optimizedProgram) {
-      this.program.applyOptimizedComponents(result.optimizedProgram);
+    if (result.optimizedProgram?.componentMap) {
+      this.program.applyOptimizedComponents(result.optimizedProgram.componentMap);
     }
 
     // Validate the optimized instruction against template invariants

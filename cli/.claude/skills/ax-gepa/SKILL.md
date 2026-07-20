@@ -17,6 +17,7 @@ Use this skill to generate direct `AxGEPA` optimization code. Prefer short, mode
 - Always set `maxMetricCalls` to bound optimizer cost.
 - Use scalar metrics for one objective and object metrics for Pareto optimization.
 - Apply results with `program.applyOptimization(result.optimizedProgram!)`.
+- If the target is a hand-rolled wrapper (not a real `AxProgram`/`AxGen`), implement `getOptimizableComponents()` / `applyOptimizedComponents(componentMap)` instead — see "Custom Tunable Programs" below. Apply with `result.optimizedProgram.componentMap`, never the raw `optimizedProgram` object.
 - For tree-wide runs, expect `optimizedProgram.componentMap`.
 - Persist artifacts with `axSerializeOptimizedProgram(...)` and restore them with `axDeserializeOptimizedProgram(...)` so the same flow works in browsers and Node.
 
@@ -214,6 +215,71 @@ program.applyOptimization(loaded);
 - Single-target runs usually populate both `optimizedProgram.instruction` and `optimizedProgram.componentMap`.
 - Tree-wide runs rely on `componentMap`, keyed by full component key.
 - Pareto points expose candidate configs under `point.configuration.componentMap`.
+
+## Custom Tunable Programs (hand-rolled wrappers)
+
+`program.applyOptimization(...)` only exists on real `AxProgram`/`AxGen` instances. If the optimizable target is a hand-rolled class that wraps an `AxGen` internally (e.g. to split one instruction into several independently-evolvable strings), implement the generic `AxOptimizableComponent` surface instead — GEPA discovers and applies updates through it without knowing about your wrapper's internals:
+
+```typescript
+import { ax, type AxOptimizableComponent } from '@ax-llm/ax';
+
+class MyProgram {
+  private _instruction = 'Default instruction';
+  private _description = 'Default output format';
+  private _program: any;
+
+  constructor() {
+    this._rebuild();
+  }
+
+  // Rebuild the underlying AxGen so the next forward() uses the latest text.
+  // MUST run after every mutation — otherwise all candidates share one prompt.
+  private _rebuild(): void {
+    this._program = ax('input:string -> output:json', {
+      description: `${this._instruction}\n\n${this._description}`,
+    });
+  }
+
+  get forward() {
+    return this._program?.forward?.bind(this._program);
+  }
+
+  getOptimizableComponents(): AxOptimizableComponent[] {
+    return [
+      { key: 'root::instruction', current: this._instruction, kind: 'instruction' },
+      { key: 'root::description', current: this._description, kind: 'instruction' },
+    ];
+  }
+
+  applyOptimizedComponents(updates: Readonly<Record<string, string>>): void {
+    if (updates['root::instruction']) this._instruction = updates['root::instruction'];
+    if (updates['root::description']) this._description = updates['root::description'];
+    this._rebuild();
+  }
+}
+```
+
+Apply the result with the `componentMap`, not the whole `optimizedProgram`:
+
+```typescript
+const result = await optimizer.compile(myProgram, train, metric, {
+  validationExamples: validation,
+  maxMetricCalls: 200,
+});
+
+// Wrong: passes the AxOptimizedProgram container itself — every key lookup
+// inside applyOptimizedComponents() misses and the "optimization" silently no-ops.
+myProgram.applyOptimizedComponents(result.optimizedProgram);
+
+// Right: componentMap is where the keyed string updates actually live.
+if (result.optimizedProgram?.componentMap) {
+  myProgram.applyOptimizedComponents(result.optimizedProgram.componentMap);
+}
+```
+
+- `getOptimizableComponents()` key format: `${programId}::${kind}[:${subKey}]`. Keys must be stable across calls.
+- `AxOptimizedProgram.componentMap` echoes back a `Record<string, string>` keyed the same way — that's the only place mutated values live; the container object itself has no per-component keys.
+- This pattern is the tree-optimization mechanism GEPA uses generically, so it composes with flows/agents too — not just standalone wrapper classes.
 
 ## Useful Options
 

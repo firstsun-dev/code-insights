@@ -253,6 +253,32 @@ describe('GEPARunner.optimize()', () => {
     expect(result).toHaveProperty('optimizedProgram');
   });
 
+  it('applies the optimized componentMap to the program instruction/description', async () => {
+    mockCompileFn = vi.fn().mockResolvedValue(makeFakeParetoResult({
+      optimizedProgram: {
+        bestScore: 0.82,
+        stats: { totalCalls: 25 },
+        optimizerType: 'GEPA',
+        optimizationTime: 5000,
+        componentMap: {
+          'root::instruction': 'Optimized instruction text',
+          'root::description': 'Optimized description text',
+        },
+      },
+    }));
+
+    const runner = createGEPARunner({
+      studentProvider: 'mistral',
+      studentApiKey: 'test-key',
+      studentModel: 'mistral-small-latest',
+    });
+
+    const result = await runner.optimize([makeTrainingExample()]);
+
+    expect(result.optimizedProgram.instruction).toBe('Optimized instruction text');
+    expect(result.optimizedProgram.description).toBe('Optimized description text');
+  });
+
   it('selects the best point from the Pareto front using weighted-sum scalarization', async () => {
     const runner = createGEPARunner({
       studentProvider: 'mistral',
