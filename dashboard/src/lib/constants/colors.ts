@@ -86,6 +86,12 @@ export const SOURCE_TOOL_COLORS: Record<string, string> = {
   'codex-cli': 'bg-green-500/10 text-green-600 border-green-500/20',
   'copilot-cli': 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
   'copilot': 'bg-violet-500/10 text-violet-600 border-violet-500/20',
+  'opencode': 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+  'antigravity': 'bg-red-500/10 text-red-600 border-red-500/20',
+  'crush': 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
+  'hermes-agent': 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+  'mistral-vibe': 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  'kilo': 'bg-teal-500/10 text-teal-600 border-teal-500/20',
 };
 
 /** Border + background colors for teammate message cards, keyed by the `color` attribute from <teammate-message>. */
