@@ -84,34 +84,29 @@ describe('homes.ts', () => {
       expect(listHomes()).toHaveLength(2); // only the first insert succeeded
     });
 
-    it('rejects a path nested inside an existing home', () => {
+    it('allows a path nested inside an existing home (e.g. a NAS-sync mirror of another machine)', () => {
+      // Providers append a fixed relative subpath (e.g. '.claude/projects') to
+      // their own home root, so two distinct, non-identical roots — nested or
+      // not — never resolve to the same absolute file. Nesting is common and
+      // legitimate: cloud/NAS sync tools routinely mirror another machine's
+      // home directory into a subfolder of the local home.
       const parent = fs.mkdtempSync(path.join(tmpRoot, 'parent-'));
       addHome(parent, 'Parent');
 
       const child = path.join(parent, 'nested');
       fs.mkdirSync(child);
 
-      expect(() => addHome(child)).toThrow(/conflicts with existing home/i);
+      expect(() => addHome(child, 'Child')).not.toThrow();
+      expect(listHomes()).toHaveLength(3);
     });
 
-    it('rejects a path that is an ancestor of an existing home', () => {
+    it('allows a path that is an ancestor of an existing home', () => {
       const parent = fs.mkdtempSync(path.join(tmpRoot, 'parent2-'));
       const child = path.join(parent, 'nested');
       fs.mkdirSync(child);
       addHome(child, 'Child');
 
-      expect(() => addHome(parent)).toThrow(/conflicts with existing home/i);
-    });
-
-    it('does not flag sibling directories with a shared string prefix as nested', () => {
-      // '/tmp/xxx/al' must not be flagged as a prefix of '/tmp/xxx/alice'
-      const al = fs.mkdtempSync(path.join(tmpRoot, 'al'));
-      const alice = `${al}ice`;
-      fs.mkdirSync(alice);
-
-      addHome(al, 'Al');
-      // Should succeed — these are sibling directories, not nested roots.
-      expect(() => addHome(alice, 'Alice')).not.toThrow();
+      expect(() => addHome(parent, 'Parent')).not.toThrow();
       expect(listHomes()).toHaveLength(3);
     });
   });

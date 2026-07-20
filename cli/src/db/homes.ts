@@ -77,32 +77,24 @@ function normalizePath(rawPath: string): string {
 }
 
 /**
- * Split a normalized absolute path into its segments, for prefix-safe
- * nested-root comparisons (so '/home/al' is not flagged as a prefix of
- * '/home/alice').
- */
-function pathSegments(p: string): string[] {
-  return p.split(path.sep).filter(Boolean);
-}
-
-/**
- * True if `a` is the same path as, or an ancestor directory of, `b`.
- */
-function isAncestorOrEqual(a: string, b: string): boolean {
-  const segA = pathSegments(a);
-  const segB = pathSegments(b);
-  if (segA.length > segB.length) return false;
-  return segA.every((seg, i) => seg === segB[i]);
-}
-
-/**
  * Register a new home root directory.
  *
  * Validates (in order, throwing a descriptive Error and NOT inserting on failure):
  *   1. The path must exist on disk and be a directory.
  *   2. No existing home may already point at this exact path.
- *   3. The path must not nest with any existing home's path (neither a prefix
- *      nor prefixed by), to keep sync-state keys collision-free.
+ *
+ * Nested home roots (e.g. a NAS-sync folder mirroring another machine's home
+ * directory, placed inside this machine's own home) are explicitly ALLOWED.
+ * Each provider's discover() appends a fixed, tool-specific relative subpath
+ * to its own home root (e.g. '{homeRoot}/.claude/projects') rather than
+ * walking the home root itself, so two distinct, non-identical home roots —
+ * nested or not — cannot resolve to the same absolute file path. The only
+ * way to produce a real collision would be registering a home root that
+ * lands exactly inside another home's own tool subdirectory (e.g.
+ * '/home/alice/.claude/projects/foo' as a second home under
+ * '/home/alice') — a deliberately contrived setup, not something normal
+ * NAS/cloud-sync mirroring triggers. The exact-duplicate-path check above,
+ * backed by the homes.path UNIQUE index, is the only guard actually needed.
  */
 export function addHome(rawPath: string, label?: string): Home {
   const normalizedPath = normalizePath(rawPath);
@@ -124,15 +116,6 @@ export function addHome(rawPath: string, label?: string): Home {
     throw new Error(
       `A home already exists for this path: '${exactMatch.label}' (id: ${exactMatch.id})`
     );
-  }
-
-  for (const home of existingHomes) {
-    if (isAncestorOrEqual(home.path, normalizedPath) || isAncestorOrEqual(normalizedPath, home.path)) {
-      throw new Error(
-        `Path '${normalizedPath}' conflicts with existing home '${home.label}' (${home.path}) — ` +
-        `home roots must not be nested inside one another`
-      );
-    }
   }
 
   const id = createHash('sha256').update(normalizedPath).digest('hex').slice(0, 16);
