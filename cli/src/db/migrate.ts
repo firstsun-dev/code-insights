@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { homedir } from 'os';
 import { SCHEMA_SQL, CURRENT_SCHEMA_VERSION } from './schema.js';
 
 export interface MigrationResult {
@@ -8,6 +9,7 @@ export interface MigrationResult {
   v9Applied: boolean;
   v10Applied: boolean;
   v11Applied: boolean;
+  v12Applied: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export interface MigrationResult {
  * Version 9: Add analysis_queue table for async hook-triggered analysis
  * Version 10: Add parent_session_id and agent_type columns to sessions for subagent hierarchy (Mistral Vibe)
  * Version 11: Add embedding_status to insights and messages, create embedding_metadata table
+ * Version 12: Add homes table + sessions.home_id column for multi-home-directory support
  */
 export function runMigrations(db: Database.Database): MigrationResult {
   // Create schema_version table first if it doesn't exist.
@@ -94,7 +97,13 @@ export function runMigrations(db: Database.Database): MigrationResult {
     v11Applied = true;
   }
 
-  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied };
+  let v12Applied = false;
+  if (currentVersion < 12) {
+    applyV12(db);
+    v12Applied = true;
+  }
+
+  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied, v12Applied };
 }
 
 function getCurrentVersion(db: Database.Database): number {
@@ -266,4 +275,33 @@ function applyV11(db: Database.Database): void {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_embedding_metadata_type ON embedding_metadata(entity_type)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_embedding_metadata_model ON embedding_metadata(model)`);
   db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(11);
+}
+
+function applyV12(db: Database.Database): void {
+  // Multi-home support: each session belongs to a "home root" directory.
+  // homes.id is a generated slug; 'default' is a reserved sentinel for this machine.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS homes (
+      id         TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      path       TEXT NOT NULL,
+      enabled    INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_homes_path ON homes(path);
+  `);
+
+  db.prepare(
+    `INSERT OR IGNORE INTO homes (id, label, path, enabled) VALUES ('default', ?, ?, 1)`
+  ).run('This machine', homedir());
+
+  // No REFERENCES clause: with foreign_keys=ON, an ALTER-added FK column must be
+  // DEFAULT NULL, which conflicts with NOT NULL DEFAULT 'default'. Integrity is
+  // guaranteed by the seed row above + application code. Existing rows backfill to 'default'.
+  db.exec(`ALTER TABLE sessions ADD COLUMN home_id TEXT NOT NULL DEFAULT 'default'`);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_home_source  ON sessions(home_id, source_tool)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_home_project ON sessions(home_id, project_id)`);
+
+  db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(12);
 }

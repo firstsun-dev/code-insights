@@ -10,6 +10,7 @@ import { Sparkles, Target, Lightbulb, GitBranch, Clock } from 'lucide-react';
 import { Link } from 'react-router';
 import { ErrorCard } from '@/components/ErrorCard';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { HomeSelect } from '@/components/filters/HomeSelect';
 import type { Insight } from '@/lib/types';
 
 function getWeekKey(dateStr: string): string {
@@ -36,6 +37,7 @@ function getWeekLabel(weekKey: string): string {
 
 export default function JournalPage() {
   const [source, setSource] = useState<string>('all');
+  const [homeId, setHomeId] = useState<string>('all');
   const { data: insights = [], isLoading, isError, refetch } = useInsights();
   // limit: 500 matches Analytics page pattern; server default is 50 which would silently miss sessions
   const { data: allSessions = [] } = useSessions({ limit: 500 });
@@ -52,13 +54,26 @@ export default function JournalPage() {
     return map;
   }, [allSessions]);
 
-  // Group learnings and decisions by week, optionally filtered by source tool
+  // Map session_id → home_id for client-side home filtering
+  const sessionHomeMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const s of allSessions) {
+      map.set(s.id, s.home_id);
+    }
+    return map;
+  }, [allSessions]);
+
+  // Group learnings and decisions by week, optionally filtered by source tool and home
   const insightsByWeek = useMemo(() => {
     const relevant = insights.filter((i) => {
       if (i.type !== 'learning' && i.type !== 'decision' && i.type !== 'technique') return false;
       if (source !== 'all') {
         const sourceTool = sessionSourceMap.get(i.session_id);
         if (sourceTool !== source) return false;
+      }
+      if (homeId !== 'all') {
+        const sessionHomeId = sessionHomeMap.get(i.session_id);
+        if (sessionHomeId !== homeId) return false;
       }
       return true;
     });
@@ -69,7 +84,7 @@ export default function JournalPage() {
       grouped[weekKey].push(insight);
     });
     return grouped;
-  }, [insights, source, sessionSourceMap]);
+  }, [insights, source, sessionSourceMap, homeId, sessionHomeMap]);
 
   const sortedWeeks = useMemo(
     () => Object.keys(insightsByWeek).sort((a, b) => b.localeCompare(a)),
@@ -85,11 +100,18 @@ export default function JournalPage() {
             A chronological timeline of your learnings and decisions
           </p>
         </div>
-        <SourceToolSelect
-          value={source}
-          onValueChange={setSource}
-          className="w-[140px] h-8 text-xs"
-        />
+        <div className="flex items-center gap-2">
+          <SourceToolSelect
+            value={source}
+            onValueChange={setSource}
+            className="w-[140px] h-8 text-xs"
+          />
+          <HomeSelect
+            value={homeId}
+            onValueChange={setHomeId}
+            className="w-[140px] h-8 text-xs"
+          />
+        </div>
       </div>
 
       {isError && (

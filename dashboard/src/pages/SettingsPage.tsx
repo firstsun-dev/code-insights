@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useLlmConfig, useSaveLlmConfig } from '@/hooks/useConfig';
 import { useUserProfile, normalizeGithubUsername } from '@/hooks/useUserProfile';
+import { useHomes, useAddHomeMutation, useRemoveHomeMutation, useSetHomeEnabledMutation } from '@/hooks/useHomes';
 import { fetchLlmModels, fetchOllamaModels, testLlmConfig } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import {
@@ -19,6 +21,8 @@ import {
   Check,
   Minus,
   User,
+  HardDrive,
+  Trash2,
 } from 'lucide-react';
 
 type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'openai-compatible';
@@ -134,6 +138,51 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     await saveProfile(profileName, profileGithubUsername);
     toast.success('Profile saved');
+  };
+
+  // Home Directories card state
+  const { data: homes = [], isLoading: homesLoading } = useHomes();
+  const addHomeMutation = useAddHomeMutation();
+  const removeHomeMutation = useRemoveHomeMutation();
+  const setHomeEnabledMutation = useSetHomeEnabledMutation();
+  const [newHomePath, setNewHomePath] = useState('');
+  const [newHomeLabel, setNewHomeLabel] = useState('');
+  const [addHomeError, setAddHomeError] = useState<string | null>(null);
+
+  const handleAddHome = async () => {
+    if (!newHomePath.trim()) return;
+    setAddHomeError(null);
+    try {
+      await addHomeMutation.mutateAsync({
+        path: newHomePath.trim(),
+        label: newHomeLabel.trim() || undefined,
+      });
+      setNewHomePath('');
+      setNewHomeLabel('');
+      toast.success('Home directory added');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add home directory';
+      setAddHomeError(msg);
+    }
+  };
+
+  const handleRemoveHome = async (id: string) => {
+    try {
+      await removeHomeMutation.mutateAsync(id);
+      toast.success('Home directory removed');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to remove home directory';
+      toast.error(msg);
+    }
+  };
+
+  const handleToggleHome = async (id: string, enabled: boolean) => {
+    try {
+      await setHomeEnabledMutation.mutateAsync({ id, enabled });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update home directory';
+      toast.error(msg);
+    }
   };
 
   const [llmProvider, setLlmProvider] = useState<LLMProvider>('openai');
@@ -377,6 +426,96 @@ export default function SettingsPage() {
           >
             Save Profile
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Home Directories Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <HardDrive className="h-5 w-5" />
+            <CardTitle className="text-base">Home Directories</CardTitle>
+          </div>
+          <CardDescription>
+            Manage the root directories Code Insights discovers sessions from
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {homesLoading ? (
+            <div className="h-16 flex items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {homes.map((home) => {
+                const isDefault = home.id === 'default';
+                return (
+                  <div
+                    key={home.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm truncate">{home.label}</p>
+                        {isDefault && (
+                          <Badge variant="outline" className="text-xs">
+                            default
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{home.path}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <Switch
+                        checked={home.enabled}
+                        onCheckedChange={(checked) => handleToggleHome(home.id, checked)}
+                        disabled={setHomeEnabledMutation.isPending}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveHome(home.id)}
+                        disabled={isDefault || removeHomeMutation.isPending}
+                        title={isDefault ? 'The default home cannot be removed' : 'Remove home'}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add Home inline form */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="text-sm font-medium">Add a home directory</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                placeholder="/absolute/path/to/directory"
+                value={newHomePath}
+                onChange={(e) => setNewHomePath(e.target.value)}
+                className="flex-1"
+              />
+              <Input
+                placeholder="Label (optional)"
+                value={newHomeLabel}
+                onChange={(e) => setNewHomeLabel(e.target.value)}
+                className="sm:w-40"
+              />
+              <Button
+                onClick={handleAddHome}
+                disabled={!newHomePath.trim() || addHomeMutation.isPending}
+              >
+                {addHomeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Add'
+                )}
+              </Button>
+            </div>
+            {addHomeError && <p className="text-sm text-red-500">{addHomeError}</p>}
+          </div>
         </CardContent>
       </Card>
 

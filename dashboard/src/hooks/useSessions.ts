@@ -4,6 +4,7 @@ import { fetchSessions, fetchSession, patchSession, deleteSession, fetchDeletedS
 interface SessionFilters {
   projectId?: string;
   sourceTool?: string;
+  homeId?: string;
   limit?: number;
   offset?: number;
 }

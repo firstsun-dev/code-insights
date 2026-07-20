@@ -29,6 +29,21 @@ function initTestDb(): Database.Database {
   return db;
 }
 
+function insertSession(
+  db: Database.Database,
+  opts: { id: string; startedAt: string; homeId?: string }
+): void {
+  db.prepare(`
+    INSERT INTO projects (id, name, path, last_activity)
+    VALUES (?, 'test', '/test', datetime('now'))
+    ON CONFLICT (id) DO NOTHING
+  `).run('p-' + opts.id);
+  db.prepare(`
+    INSERT INTO sessions (id, project_id, project_name, project_path, started_at, ended_at, home_id)
+    VALUES (?, ?, 'test', '/test', ?, ?, ?)
+  `).run(opts.id, 'p-' + opts.id, opts.startedAt, opts.startedAt, opts.homeId ?? 'default');
+}
+
 // ──────────────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────────────
@@ -67,6 +82,60 @@ describe('Analytics routes', () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toContain('Invalid range');
+    });
+  });
+
+  describe('GET /api/analytics/daily', () => {
+    it('returns 400 for invalid range', async () => {
+      const app = createApp();
+      const res = await app.request('/api/analytics/daily?range=invalid');
+      expect(res.status).toBe(400);
+    });
+
+    it('groups sessions by date with no row cap, so old data survives under range=all', async () => {
+      // Regression test: the dashboard activity chart used to be built
+      // client-side from a LIMIT-500 session fetch, silently dropping
+      // anything older than the 500th most recent session even when the
+      // user selected "all". This endpoint aggregates in SQL with no LIMIT.
+      insertSession(testDb, { id: 's-april', startedAt: '2026-04-15T10:00:00.000Z' });
+      // A batch of much more recent sessions — in the old client-side
+      // implementation, enough of these would have pushed s-april out of
+      // the fetched window.
+      for (let i = 0; i < 10; i++) {
+        insertSession(testDb, { id: `s-recent-${i}`, startedAt: '2026-07-19T10:00:00.000Z' });
+      }
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/daily?range=all');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const april = body.daily.find((d: { date: string }) => d.date === '2026-04-15');
+      expect(april).toBeDefined();
+      expect(april.session_count).toBe(1);
+    });
+
+    it('excludes old data outside a bounded range', async () => {
+      insertSession(testDb, { id: 's-old', startedAt: '2026-01-01T10:00:00.000Z' });
+      insertSession(testDb, { id: 's-new', startedAt: new Date().toISOString() });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/daily?range=7d');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const old = body.daily.find((d: { date: string }) => d.date === '2026-01-01');
+      expect(old).toBeUndefined();
+    });
+
+    it('filters by homeId', async () => {
+      insertSession(testDb, { id: 's-home-a', startedAt: '2026-07-19T10:00:00.000Z', homeId: 'home-a' });
+      insertSession(testDb, { id: 's-home-b', startedAt: '2026-07-19T10:00:00.000Z', homeId: 'home-b' });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/daily?range=all&homeId=home-a');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const day = body.daily.find((d: { date: string }) => d.date === '2026-07-19');
+      expect(day.session_count).toBe(1);
     });
   });
 
