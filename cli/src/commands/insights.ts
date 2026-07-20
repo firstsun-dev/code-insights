@@ -375,12 +375,27 @@ export async function insightsCommand(
     source?: string;
     force?: boolean;
     quiet?: boolean;
+    all?: boolean;
   }
 ): Promise<void> {
   const quiet = opts.quiet ?? false;
   const log = quiet ? () => {} : console.log.bind(console);
 
   try {
+    // --all: analyze all unanalyzed sessions
+    if (opts.all) {
+      await insightsCheckCommand({
+        days: 30,
+        quiet,
+        analyze: true,
+        native: opts.native,
+        codex: opts.codex,
+        antigravity: opts.antigravity,
+        vibe: opts.vibe,
+      });
+      return;
+    }
+
     let resolvedSessionId: string;
 
     if (opts.hook) {

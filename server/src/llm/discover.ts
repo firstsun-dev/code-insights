@@ -49,6 +49,16 @@ export async function discoverModels(provider: LLMProvider, apiKey?: string, bas
       const data = await res.json() as any;
       return (data.data || []).map((m: any) => ({ id: m.id, name: m.name || m.id }));
     }
+    case 'openai-compatible':
+    case 'openai': {
+      const base = baseUrl || 'https://api.openai.com';
+      const res = await fetch(`${base}/v1/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch OpenAI models');
+      const data = await res.json() as any;
+      return (data.data || []).map((m: any) => ({ id: m.id, name: m.id }));
+    }
     case 'mistral': {
       const res = await fetch('https://api.mistral.ai/v1/models', {
         headers: { Authorization: `Bearer ${apiKey}` }

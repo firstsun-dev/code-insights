@@ -7,7 +7,7 @@ import { discoverModels } from '../llm/discover.js';
 
 const app = new Hono();
 
-const VALID_PROVIDERS = ['openai', 'anthropic', 'gemini', 'ollama', 'openrouter', 'mistral'] as const;
+const VALID_PROVIDERS = ['openai', 'anthropic', 'gemini', 'ollama', 'openrouter', 'mistral', 'openai-compatible'] as const;
 
 const PROVIDER_API_KEY_ENV: Record<string, string> = {
   openai:     'OPENAI_API_KEY',
@@ -15,6 +15,7 @@ const PROVIDER_API_KEY_ENV: Record<string, string> = {
   gemini:     'GEMINI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   mistral:    'MISTRAL_API_KEY',
+  'openai-compatible': 'OPENAI_COMPATIBLE_API_KEY',
 };
 
 function maskApiKey(key: string | undefined): string | undefined {
@@ -32,7 +33,7 @@ function describeApiKeySource(provider: string, storedKey?: string): 'env' | 'st
   return 'none';
 }
 
-// GET /api/config/llm — return full config (API key masked)
+// GET /api/config/llm — return full config (API key masked for security)
 app.get('/llm', (c) => {
   const config = loadConfig();
   const llm = config?.dashboard?.llm;
@@ -41,7 +42,7 @@ app.get('/llm', (c) => {
     dashboardPort: config?.dashboard?.port ?? 7890,
     provider: llm?.provider,
     model: llm?.model,
-    apiKey: maskApiKey(llm?.apiKey),
+    apiKey: llm?.apiKey ? '***' : undefined, // Always mask when present
     apiKeySource: llm ? describeApiKeySource(llm.provider, llm.apiKey) : 'none',
     baseUrl: llm?.baseUrl,
   });

@@ -100,7 +100,7 @@ export function createClientFromConfig(config: LLMProviderConfig): LLMClient {
   
   switch (config.provider) {
     case 'openai':
-      return createOpenAIClient(apiKey ?? '', config.model);
+      return createOpenAIClient(apiKey ?? '', config.model, config.baseUrl);
     case 'anthropic':
       return createAnthropicClient(apiKey ?? '', config.model);
     case 'gemini':
@@ -111,6 +111,8 @@ export function createClientFromConfig(config: LLMProviderConfig): LLMClient {
       return createOpenRouterClient(apiKey ?? '', config.model);
     case 'mistral':
       return createMistralClient(apiKey ?? '', config.model);
+    case 'openai-compatible':
+      return createOpenAIClient(apiKey ?? '', config.model, config.baseUrl);
     default:
       throw new Error(`Unknown LLM provider: ${config.provider}`);
   }

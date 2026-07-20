@@ -285,18 +285,21 @@ async function runInteractiveLLMConfig(): Promise<void> {
     // started with a key from env var, and explicit blank means "don't use a stored key".
   }
 
-  // Step 4: Base URL (Ollama or custom)
-  if (provider === 'ollama') {
+  // Step 4: Base URL (Ollama or OpenAI-compatible)
+  if (provider === 'ollama' || provider === 'openai-compatible') {
+    const defaultBaseUrl = provider === 'ollama' ? 'http://localhost:11434' : '';
     const { baseUrl } = await inquirer.prompt<{ baseUrl: string }>([
       {
         type: 'input',
         name: 'baseUrl',
-        message: 'Ollama URL (leave blank for default http://localhost:11434):',
-        default: existing?.baseUrl ?? '',
+        message: provider === 'ollama'
+          ? 'Ollama URL (leave blank for default http://localhost:11434):'
+          : 'Base URL (e.g. https://api.together.ai):',
+        default: existing?.baseUrl ?? defaultBaseUrl,
       },
     ]);
 
-    if (baseUrl && baseUrl !== 'http://localhost:11434') {
+    if (baseUrl && baseUrl !== defaultBaseUrl) {
       llmConfig.baseUrl = baseUrl;
     }
   }

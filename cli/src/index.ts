@@ -168,6 +168,7 @@ const insightsCmd = program
   .option('-s, --source <tool>', 'Source tool identifier (default: claude-code)')
   .option('--force', 'Re-analyze even if already analyzed at this session length')
   .option('-q, --quiet', 'Suppress output')
+  .option('--all', 'Analyze all unanalyzed sessions in the last 30 days')
   .option('--model <model>', 'Model for native analysis (default: sonnet)')
   .action(async (sessionId: string | undefined, opts) => {
     await insightsCommand(sessionId, opts);
