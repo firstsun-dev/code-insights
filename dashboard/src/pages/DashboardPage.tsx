@@ -10,6 +10,7 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { BulkAnalyzeButton } from '@/components/analysis/BulkAnalyzeButton';
 import { StatsHeroSkeleton } from '@/components/skeletons/StatsHeroSkeleton';
 import { ErrorCard } from '@/components/ErrorCard';
+import { HomeSelect } from '@/components/filters/HomeSelect';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DailyStats } from '@/lib/types';
@@ -26,9 +27,10 @@ function getGreeting(): string {
 
 export default function DashboardPage() {
   const [range, setRange] = useState<DashboardRange>('7d');
+  const [homeId, setHomeId] = useState<string>('all');
 
-  const { data: dashStats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats(range);
-  const { data: sessions = [], isLoading: sessionsLoading, isError: sessionsError, refetch: refetchSessions } = useSessions({ limit: 500 });
+  const { data: dashStats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats(range, homeId !== 'all' ? homeId : undefined);
+  const { data: sessions = [], isLoading: sessionsLoading, isError: sessionsError, refetch: refetchSessions } = useSessions({ limit: 500, ...(homeId !== 'all' && { homeId }) });
   const { data: insights = [], isLoading: insightsLoading } = useInsights();
   const { data: projects = [] } = useProjects();
 
@@ -105,7 +107,10 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
-        <span className="text-sm text-muted-foreground">{todayLabel}</span>
+        <div className="flex items-center gap-2">
+          <HomeSelect value={homeId} onValueChange={setHomeId} className="w-[140px] h-7 text-xs" />
+          <span className="text-sm text-muted-foreground">{todayLabel}</span>
+        </div>
       </div>
 
       {/* Error state */}

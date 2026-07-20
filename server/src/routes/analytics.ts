@@ -9,7 +9,7 @@ type Range = typeof VALID_RANGES[number];
 // Dashboard overview stats for a given time range (e.g. ?range=7d|30d|90d|all)
 app.get('/dashboard', (c) => {
   const db = getDb();
-  const { range = '7d' } = c.req.query();
+  const { range = '7d', homeId } = c.req.query();
 
   if (!VALID_RANGES.includes(range as Range)) {
     return c.json({ error: `Invalid range. Must be one of: ${VALID_RANGES.join(', ')}` }, 400);
@@ -25,10 +25,17 @@ app.get('/dashboard', (c) => {
     periodStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
   }
 
-  const where = periodStart
-    ? 'WHERE started_at >= ? AND deleted_at IS NULL'
-    : 'WHERE deleted_at IS NULL';
-  const params = periodStart ? [periodStart] : [];
+  const conditions: string[] = ['deleted_at IS NULL'];
+  const params: string[] = [];
+  if (periodStart) {
+    conditions.push('started_at >= ?');
+    params.push(periodStart);
+  }
+  if (homeId) {
+    conditions.push('home_id = ?');
+    params.push(homeId);
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   const stats = db.prepare(`
     SELECT
