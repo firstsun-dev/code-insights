@@ -66,6 +66,18 @@ export interface Session {
   compact_count: number;
   auto_compact_count: number;
   slash_commands: string | null; // JSON-encoded string[] — decode with parseJsonField<string[]>(x, [])
+  facets?: {
+    session_id: string;
+    outcome_satisfaction: string;
+    workflow_pattern: string | null;
+    had_course_correction: number;
+    course_correction_reason: string | null;
+    iteration_count: number;
+    friction_points: string;     // JSON string
+    effective_patterns: string;  // JSON string
+    extracted_at: string;
+    analysis_version: string;
+  } | null;
 }
 
 export type InsightType = 'summary' | 'decision' | 'learning' | 'technique' | 'prompt_quality';
@@ -200,6 +212,11 @@ export interface InsightMetadata {
     why?: string;
     what_worked?: string;
     why_effective?: string;
+    sfl_breakdown?: {
+      ideational: string;
+      interpersonal: string;
+      textual: string;
+    };
   }>;
   findings?: Array<{
     category: string;
@@ -209,6 +226,11 @@ export interface InsightMetadata {
     impact: 'high' | 'medium' | 'low';
     confidence: number;
     suggested_improvement?: string;
+    sfl_breakdown?: {
+      ideational: string;
+      interpersonal: string;
+      textual: string;
+    };
   }>;
   dimension_scores?: {
     context_provision: number;

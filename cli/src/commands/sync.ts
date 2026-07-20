@@ -137,6 +137,9 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
   let totalErrorCount = 0;
   let totalUpdatedExisting = 0;
   const sessionsByProvider: Record<string, number> = {};
+  let totalDiscoveredFiles = 0;
+  let discoveryWarned = false;
+
   for (const provider of providers) {
     const providerName = provider.getProviderName();
     try {
@@ -147,17 +150,20 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
       // Discovery
       spinner.start(`Discovering ${providerName} sessions...`);
       const sessionFiles = await provider.discover({ projectFilter: options.project });
-      spinner.stop();
+      totalDiscoveredFiles += sessionFiles.length;
+      spinner.succeed(`Found ${sessionFiles.length} ${providerName} session files`);
+      if (!discoveryWarned && totalDiscoveredFiles > 500) {
+        discoveryWarned = true;
+        log(chalk.dim(`  ${totalDiscoveredFiles} total session files discovered — sync may take a moment`));
+      }
 
       if (sessionFiles.length === 0) continue;
 
       // Filter to only new/modified files
       const filesToSync = filterFilesToSync(sessionFiles, syncState, options.force);
+      log(chalk.gray(`  ${filesToSync.length} files need syncing (${sessionFiles.length - filesToSync.length} already synced)`));
 
-      if (filesToSync.length === 0) {
-        log(chalk.gray(`  ✔ Up to date (${sessionFiles.length} sessions)`));
-        continue;
-      }
+      if (filesToSync.length === 0) continue;
 
       if (options.dryRun) {
         for (const file of filesToSync) {
@@ -169,6 +175,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
       // Process files — accumulate per-provider counts, show one summary line after
       let providerSyncedCount = 0;
       let providerUpdatedCount = 0;
+      let providerSkippedCount = 0;
       let providerMessageCount = 0;
 
       for (const filePath of filesToSync) {
@@ -179,14 +186,13 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
           // Parse session
           const session = await provider.parse(filePath);
           if (!session) {
-            // Track null-parse files so they aren't re-discovered on every sync run
-            updateSyncState(syncState, filePath, '__empty__');
-            saveSyncState(syncState);
+            providerSkippedCount++;
             continue;
           }
 
           // Skip trivial sessions (≤2 messages) — likely abandoned prompts with no content
-          if (session.messageCount <= 2) {
+          if (session.messageCount <= 2 && session.sourceTool !== 'antigravity') {
+            providerSkippedCount++;
             updateSyncState(syncState, filePath, session.id);
             saveSyncState(syncState);
             continue;
@@ -223,14 +229,17 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
 
       // One summary line per provider instead of per-file noise
       spinner.stop();
-      if (providerSyncedCount > 0) {
+      if (providerSyncedCount > 0 || providerSkippedCount > 0) {
         const providerNewCount = providerSyncedCount - providerUpdatedCount;
         const parts: string[] = [];
         if (providerNewCount > 0) parts.push(`${providerNewCount} new`);
         if (providerUpdatedCount > 0) parts.push(`${providerUpdatedCount} updated`);
         if (parts.length === 0) parts.push('0 synced');
         const syncedPart = `${parts.join(', ')}${providerMessageCount > 0 ? ` (${providerMessageCount.toLocaleString()} messages)` : ''}`;
-        log(chalk.gray(`  ✔ Synced ${syncedPart}`));
+        const skippedPart = providerSkippedCount > 0
+          ? `, ${providerSkippedCount} empty`
+          : '';
+        log(chalk.gray(`  ${syncedPart}${skippedPart}`));
       }
     } catch (error) {
       totalErrorCount++;
@@ -255,8 +264,8 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
   if (shouldRecalculateUsageStats) {
     spinner.start('Recalculating usage stats...');
     try {
-      recalculateUsageStats();
-      spinner.stop();
+      const result = recalculateUsageStats();
+      spinner.succeed(`Usage stats reconciled (${result.sessionsWithUsage} sessions with usage data)`);
     } catch (error) {
       spinner.warn('Could not reconcile usage stats');
       if (!options.quiet) {
@@ -371,12 +380,8 @@ export async function syncSingleFile(options: {
   const provider = getProvider(options.sourceTool ?? 'claude-code');
   const session = await provider.parse(options.filePath);
   if (!session) return;
-
-  // Data quality invariant: skip trivial sessions (matches runSync filter at line ~194)
-  if (session.messageCount <= 2) return;
-
   insertSessionWithProjectAndReturnIsNew(session, false);
-  insertMessages(session);
+  insertMessages(session, false);
 }
 
 /**
@@ -466,9 +471,9 @@ interface TrivialSession {
 export function getTrivialSessions(): TrivialSession[] {
   const db = getDb();
   return db.prepare(`
-    SELECT id, COALESCE(custom_title, generated_title) as title, project_name, message_count
+    SELECT id, COALESCE(custom_title, generated_title) AS title, project_name, message_count
     FROM sessions
-    WHERE message_count <= 2 AND deleted_at IS NULL
+    WHERE message_count <= 2 AND source_tool != 'antigravity' AND deleted_at IS NULL
     ORDER BY started_at DESC
   `).all() as TrivialSession[];
 }
@@ -485,7 +490,7 @@ export function pruneTrivialSessions(ids: string[]): { deleted: number } {
   const result = db.prepare(`
     UPDATE sessions
     SET deleted_at = datetime('now')
-    WHERE id IN (${placeholders}) AND deleted_at IS NULL
+    WHERE id IN (${placeholders}) AND source_tool != 'antigravity' AND deleted_at IS NULL
   `).run(...ids);
   return { deleted: result.changes };
 }

@@ -51,6 +51,13 @@ describe('normalizeCategory', () => {
   it('returns original for no match', () => {
     expect(normalizeCategory('completely-unrelated', config)).toBe('completely-unrelated');
   });
+
+  it('handles null, undefined, empty, or whitespace-only input gracefully', () => {
+    expect(normalizeCategory(null, config)).toBe('unknown');
+    expect(normalizeCategory(undefined, config)).toBe('unknown');
+    expect(normalizeCategory('', config)).toBe('unknown');
+    expect(normalizeCategory('   ', config)).toBe('unknown');
+  });
 });
 
 describe('kebabToTitleCase', () => {

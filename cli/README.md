@@ -45,6 +45,8 @@ code-insights stats today              # today's sessions
 code-insights dashboard                # start dashboard server (auto-syncs first)
 code-insights dashboard --no-sync      # start dashboard without syncing
 code-insights sync                     # sync sessions only
+code-insights queue status             # check analysis queue
+code-insights insights check           # find unanalyzed sessions
 code-insights init                     # customize settings (optional)
 code-insights doctor                   # diagnose your installation (start here if something's wrong)
 ```
@@ -252,16 +254,17 @@ code-insights reset --confirm
 
 ### Session Analysis
 
+Generate AI-powered insights for individual sessions. Requires an LLM provider to be configured.
+
 ```bash
-# Analyze a session using your configured LLM provider
+# Analyze a specific session using configured LLM provider
 code-insights insights <session_id>
 
-# Analyze using Claude Code (no API key needed — uses your Claude subscription)
+# Analyze using Claude native (no API key needed)
 code-insights insights <session_id> --native
 
 # Check for unanalyzed sessions (last 7 days)
 code-insights insights check
-
 # Batch analyze all unanalyzed sessions
 code-insights insights check --analyze
 
@@ -269,21 +272,155 @@ code-insights insights check --analyze
 code-insights insights check --days 14
 ```
 
-### Auto-Sync & Auto-Analyze Hook
+### Queue Management
+
+The analysis queue runs session insights asynchronously to prevent blocking hooks and the UI.
 
 ```bash
-# Install Claude Code hooks — auto-sync + auto-analyze when sessions end
+# Show queue status (pending, processing, completed, failed counts)
+code-insights queue status
+
+# Machine-readable JSON output
+code-insights queue status --quiet
+
+# Process pending items in foreground
+code-insights queue process
+
+# Retry failed analysis for a specific session
+code-insights queue retry <session_id>
+
+# Retry all failed items
+code-insights queue retry --all
+
+# Remove completed/failed items older than N days (default: 7)
+code-insights queue prune
+code-insights queue prune --days 14
+```
+
+**Queue States:**
+- `pending` — waiting to be processed
+- `processing` — currently running analysis
+- `completed` — successfully analyzed
+- `failed` — analysis failed (retry available)
+
+### Embeddings
+
+Manage vector embeddings for semantic search over insights and messages. Requires an Ollama instance with an embedding model (e.g., `embeddinggemma:latest`).
+
+```bash
+# Backfill pending embeddings (insights, messages, or both)
+code-insights embeddings backfill
+code-insights embeddings backfill --entity insights
+code-insights embeddings backfill --entity messages
+code-insights embeddings backfill --model embeddinggemma:latest --batch-size 50
+
+# Show embedding coverage and vector index stats
+code-insights embeddings status
+
+# Force re-compute stale embeddings
+code-insights embeddings recompute --all
+code-insights embeddings recompute --session-id <session_id>
+code-insights embeddings recompute --project-id <project_id>
+
+# KNN similarity search over insight embeddings (for testing/debugging)
+code-insights embeddings search "how to handle auth"
+code-insights embeddings search "error handling patterns" --top-k 10
+```
+
+**Ollama configuration:**
+- Set `OLLAMA_BASE_URL` environment variable to point to your Ollama instance (default: `http://tinybot:11434`)
+- The default embedding model is `embeddinggemma:latest` (768-dim)
+
+### Prompt Optimization (GEPA)
+
+Automatically evolve insight-generation prompts using multi-objective optimization powered by `@ax-llm/ax`. This uses the GEPA (Genetic-Pareto) algorithm to find prompt variants that maximize coverage, precision, actionability, and brevity.
+
+```bash
+# Run GEPA optimization on insight generation prompts
+code-insights optimize run
+
+# Customize providers, models, and parameters
+code-insights optimize run \
+  --provider openai \
+  --student-model gpt-4o-mini \
+  --teacher-model claude-sonnet-4-20250514 \
+  --trials 25 \
+  --max-calls 200 \
+  --days 30
+
+# Show current optimization state (active version, scores, convergence)
+code-insights optimize status
+
+# List all optimization versions
+code-insights optimize list
+
+# Apply an optimized prompt version (used for future insight generation)
+code-insights optimize apply <version-id>
+
+# A/B compare two prompt versions (default: active vs latest)
+code-insights optimize compare
+code-insights optimize compare <version-a> <version-b>
+
+# Delete an optimization version
+code-insights optimize delete <version-id>
+```
+
+**How it works:**
+1. Training data is loaded from your synced sessions (last N days, min messages filter)
+2. A fast/cheap **student model** generates insights; a strong **teacher model** evaluates them
+3. GEPA evolves prompt variants using a multi-objective metric (coverage, precision, actionability, brevity)
+4. Results are saved to `~/.code-insights/optimizations/<version-id>/` Pareto frontier artifacts
+5. Apply a version to use it for future insight generation
+
+**Optimization objectives (scored 0-1):**
+| Objective | Description |
+|-----------|-------------|
+| `coverage` | % of session content captured in generated insights |
+| `precision` | % of insights that are non-trivial (not filler) |
+| `actionability` | % of insights with concrete, actionable takeaways |
+| `brevity` | inverse of total insight token count (normalized) |
+
+**Supported providers:** `openai`, `anthropic`, `mistral`, `deepseek`, `cohere`, `google-gemini`
+
+**Common flags:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--provider` | LLM provider for both student and teacher | `openai` |
+| `--student-model` | Fast/cheap model for generating insights | `gpt-4o-mini` |
+| `--teacher-model` | Strong model for evaluation | `claude-sonnet-4-20250514` |
+| `--trials` | Number of optimization trials | `25` |
+| `--seed` | Random seed for reproducibility | `42` |
+| `--max-calls` | Max metric calls (cost bound) | `200` |
+| `--minibatch` | Minibatch size for GEPA | `6` |
+| `--days` | Use sessions from last N days for training | `30` |
+| `--min-messages` | Minimum messages per session | `10` |
+
+### Hook Integration
+
+```bash
+# Install unified session-end hook (replaces old two-hook system)
 code-insights install-hook
 
-# Install only the sync hook (no analysis)
+# Install only sync hook (no analysis)
 code-insights install-hook --sync-only
 
-# Install only the analysis hook
+# Install only analysis hook (no sync)
 code-insights install-hook --analysis-only
 
 # Remove all hooks
 code-insights uninstall-hook
+
+# Session-end hook entry point (used internally by Claude Code)
+code-insights session-end
 ```
+
+The `session-end` command replaces the previous two-hook system:
+1. **Syncs** the session file to SQLite (foreground, ~50-200ms)
+2. **Enqueues** the session for async analysis (<1ms)
+3. **Spawns** a detached worker process for background analysis
+4. **Exits immediately** — hook completes quickly
+
+Worker logs are written to `~/.code-insights/hook-analysis.log`.
 
 ### Telemetry
 
@@ -303,9 +440,7 @@ CODE_INSIGHTS_TELEMETRY_DISABLED=1 code-insights sync
 
 ## LLM Configuration
 
-**Claude Code users don't need to configure anything.** Run `code-insights install-hook` and sessions are analyzed automatically using your Claude subscription.
-
-For other tools, or if you prefer a different model, configure a provider via CLI or the dashboard Settings page:
+Session analysis (summaries, decisions, learnings, facets), Reflect synthesis, and GEPA prompt optimization require an LLM provider. Configure it via CLI or the dashboard Settings page.
 
 ```bash
 code-insights config llm
@@ -322,6 +457,52 @@ code-insights config llm
 | Ollama | llama3.2, qwen2.5-coder, etc. | No (local) |
 
 API keys are stored in `~/.code-insights/config.json` (mode 0o600, readable only by you).
+
+**New dependencies (v4.7.0):**
+- `@ax-llm/ax` — GEPA prompt optimization framework
+- `sqlite-vec` — Vector similarity search extension for SQLite
+
+## Troubleshooting
+
+### Queue Issues
+
+**Check queue status:**
+```bash
+code-insights queue status
+```
+
+**View worker logs:**
+```bash
+tail -f ~/.code-insights/hook-analysis.log
+```
+
+**Common solutions:**
+
+| Problem | Solution |
+|---------|----------|
+| Analysis stuck in "processing" | `code-insights queue retry --all` |
+| Multiple failed items | Check LLM provider config: `code-insights config llm --show` |
+| Hook not triggering | Reinstall: `code-insights uninstall-hook && code-insights install-hook` |
+| Worker process issues | Check logs and verify LLM provider connectivity |
+
+**Reset everything:**
+```bash
+# Clear all queue items and restart
+code-insights queue prune --days 0
+code-insights sync
+```
+
+### Session Analysis
+
+**No insights generated:**
+1. Verify LLM provider is configured: `code-insights config llm --show`
+2. Check queue status: `code-insights queue status`
+3. Try manual analysis: `code-insights insights <session_id> --native`
+
+**Analysis timeouts:**
+- Use `--native` flag for local Claude processing
+- Check network connectivity for cloud providers
+- Verify API key validity
 
 ## Development
 

@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
+import type Database from 'better-sqlite3';
 import type { AnalysisResponse, PromptQualityResponse } from './prompt-types.js';
 import { normalizePatternCategory } from './pattern-normalize.js';
 import { normalizePromptQualityCategory } from './prompt-quality-normalize.js';
@@ -28,6 +29,7 @@ export interface InsightRow {
   created_at: string;        // ISO 8601
   scope: string;
   analysis_version: string;
+  embedding_status: 'pending' | 'computed' | 'stale' | 'failed';
 }
 
 // Minimal session data needed for analysis (from SQLite sessions row).
@@ -72,6 +74,7 @@ export function convertToInsightRows(response: AnalysisResponse, session: Sessio
     created_at: now,
     scope: 'session',
     analysis_version: ANALYSIS_VERSION,
+    embedding_status: 'pending',
   });
 
   for (const decision of (response.decisions ?? [])) {
@@ -111,6 +114,7 @@ export function convertToInsightRows(response: AnalysisResponse, session: Sessio
       created_at: now,
       scope: 'session',
       analysis_version: ANALYSIS_VERSION,
+      embedding_status: 'pending',
     });
   }
 
@@ -143,6 +147,7 @@ export function convertToInsightRows(response: AnalysisResponse, session: Sessio
       created_at: now,
       scope: 'session',
       analysis_version: ANALYSIS_VERSION,
+      embedding_status: 'pending',
     });
   }
 
@@ -186,10 +191,37 @@ export function convertPQToInsightRow(response: PromptQualityResponse, session: 
     created_at: now,
     scope: 'session',
     analysis_version: ANALYSIS_VERSION,
+    embedding_status: 'pending',
   };
 }
 
 // --- DB writes ---
+
+export interface DeleteOptions {
+  excludeTypes?: string[];
+  includeOnlyTypes?: string[];
+  excludeIds?: string[];
+}
+
+// ── Semantic deduplication ─────────────────────────────────────────
+
+export interface DedupMetrics {
+  duplicatesSkipped: number;
+  nearDuplicatesMerged: number;
+  embeddingsMarkedStale: number;
+  embeddingsRecomputed: number;
+}
+
+export const EMPTY_DEDUP_METRICS: DedupMetrics = {
+  duplicatesSkipped: 0,
+  nearDuplicatesMerged: 0,
+  embeddingsMarkedStale: 0,
+  embeddingsRecomputed: 0,
+};
+
+// Deduplication thresholds (cosine similarity)
+const DUPLICATE_THRESHOLD = 0.90;  // similarity >= 0.90 → exact duplicate, skip
+const MERGE_THRESHOLD = 0.85;     // similarity >= 0.85 → near-duplicate, merge
 
 /**
  * Auto-apply an LLM-generated summary title as the session's generated_title.
@@ -205,16 +237,111 @@ export function applyGeneratedTitle(sessionId: string, insights: Array<{ type: s
 
 /**
  * Write insight rows to SQLite using prepared statements.
+ * Synchronous — no embedding/dedup. Backward-compatible with existing callers.
  */
 export function saveInsightsToDb(insights: InsightRow[]): void {
   if (insights.length === 0) return;
+  insertInsightsBatch(insights);
+}
+
+/**
+ * Write insight rows to SQLite with semantic deduplication.
+ *
+ * For each insight:
+ *   1. Compute embedding via the provided embedFn.
+ *   2. Query vec_insights for semantically similar existing embeddings.
+ *   3. If similarity >= 0.90: skip (exact duplicate).
+ *   4. If similarity >= 0.85: merge link_ids metadata into the existing row,
+ *      then skip inserting the new row.
+ *   5. Otherwise: insert as usual.
+ *
+ * Fast path: if the vec_insights table is empty (no embeddings yet), all rows
+ * are inserted without dedup checks.
+ *
+ * For re-analysis (when the caller sets embedding_status = 'stale' on old rows):
+ *   - Old embeddings are marked stale before this function is called.
+ *   - New embeddings are computed and checked against whatever is in the vector store.
+ */
+export async function saveInsightsToDbWithDedup(
+  insights: InsightRow[],
+  embedFn: (text: string) => Promise<Float32Array>,
+  loadVectorExtensionFn: (db: Database.Database) => void,
+  createVectorTableFn: (db: Database.Database, entityType: 'insight' | 'message', dim: number) => void,
+  insertEmbeddingFn: (db: Database.Database, entityType: 'insight' | 'message', id: string, vector: Float32Array) => void,
+  findSimilarFn: (db: Database.Database, entityType: 'insight' | 'message', queryVector: Float32Array, threshold: number, limit: number) => Array<{ id: string; distance: number; metadata: string | null }>,
+): Promise<DedupMetrics> {
+  const metrics: DedupMetrics = { ...EMPTY_DEDUP_METRICS };
+  if (insights.length === 0) return metrics;
+
+  const db = getDb();
+
+  // Ensure vector extension is loaded and table exists.
+  loadVectorExtensionFn(db);
+  createVectorTableFn(db, 'insight', 768);
+
+  // Fast path: no existing embeddings → skip dedup entirely.
+  const existingCount = db.prepare("SELECT COUNT(*) as n FROM vec_insights").get() as { n: number };
+  if (existingCount.n === 0) {
+    insertInsightsBatch(insights);
+    return metrics;
+  }
+
+  const insertRows: InsightRow[] = [];
+
+  for (const row of insights) {
+    const sourceText = `${row.type} [${row.project_name}] ${row.title}\n${row.content}\n${row.summary}`;
+    const vector = await embedFn(sourceText);
+
+    // Check for exact duplicates (similarity >= 0.90).
+    const exactDupes = findSimilarFn(db, 'insight', vector, DUPLICATE_THRESHOLD, 1);
+    if (exactDupes.length > 0) {
+      metrics.duplicatesSkipped++;
+      continue;
+    }
+
+    // Check for near-duplicates (similarity >= 0.85).
+    const nearDupes = findSimilarFn(db, 'insight', vector, MERGE_THRESHOLD, 5);
+    if (nearDupes.length > 0) {
+      // Merge: update the existing insight's metadata with link_ids.
+      const existingRow = db.prepare('SELECT id, metadata FROM insights WHERE id = ?').get(nearDupes[0].id) as { id: string; metadata: string | null } | undefined;
+      if (existingRow) {
+        const existingMeta = existingRow.metadata ? JSON.parse(existingRow.metadata) : {};
+        const newMeta = row.metadata ? JSON.parse(row.metadata) : {};
+        const linkIds = newMeta.link_ids || [];
+        if (linkIds.length > 0) {
+          const mergedLinkIds = [...(existingMeta.link_ids || []), ...linkIds];
+          // Deduplicate link_ids
+          existingMeta.link_ids = [...new Set(mergedLinkIds)];
+          db.prepare('UPDATE insights SET metadata = ? WHERE id = ?').run(JSON.stringify(existingMeta), existingRow.id);
+          metrics.nearDuplicatesMerged++;
+        }
+      }
+      continue;
+    }
+
+    // No duplicate — insert the row and its embedding.
+    insertRows.push(row);
+    insertEmbeddingFn(db, 'insight', row.id, vector);
+  }
+
+  if (insertRows.length > 0) {
+    insertInsightsBatch(insertRows);
+  }
+
+  return metrics;
+}
+
+/**
+ * Synchronous batch insert of insight rows (internal helper).
+ */
+function insertInsightsBatch(rows: InsightRow[]): void {
   const db = getDb();
   const insert = db.prepare(`
     INSERT OR REPLACE INTO insights (
       id, session_id, project_id, project_name, type, title, content,
       summary, bullets, confidence, source, metadata, timestamp,
-      created_at, scope, analysis_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, scope, analysis_version, embedding_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertMany = db.transaction((rows: InsightRow[]) => {
@@ -236,17 +363,21 @@ export function saveInsightsToDb(insights: InsightRow[]): void {
         row.created_at,
         row.scope,
         row.analysis_version,
+        row.embedding_status,
       );
     }
   });
 
-  insertMany(insights);
+  insertMany(rows);
 }
 
-export interface DeleteOptions {
-  excludeTypes?: string[];
-  includeOnlyTypes?: string[];
-  excludeIds?: string[];
+/**
+ * Mark an existing insight's embedding as stale (triggers re-computation).
+ * Called before re-analysis so the embedding pipeline picks it up.
+ */
+export function markInsightStale(id: string): void {
+  const db = getDb();
+  db.prepare("UPDATE insights SET embedding_status = 'stale' WHERE id = ?").run(id);
 }
 
 /**
@@ -305,20 +436,29 @@ export function saveFacetsToDb(
     : [];
 
   db.prepare(`
-    INSERT OR REPLACE INTO session_facets
-    (session_id, outcome_satisfaction, workflow_pattern, had_course_correction,
-     course_correction_reason, iteration_count, friction_points, effective_patterns,
-     analysis_version)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT OR REPLACE INTO session_facets
+  (session_id, outcome_satisfaction, workflow_pattern, had_course_correction,
+   course_correction_reason, iteration_count, friction_points, effective_patterns,
+   analysis_version)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    sessionId,
-    facets.outcome_satisfaction,
-    facets.workflow_pattern ?? null,
-    facets.had_course_correction ? 1 : 0,
-    facets.course_correction_reason,
-    facets.iteration_count,
-    JSON.stringify(Array.isArray(facets.friction_points) ? facets.friction_points : []),
-    JSON.stringify(normalizedPatterns),
-    analysisVersion,
+  sessionId,
+  facets.outcome_satisfaction,
+  facets.workflow_pattern ?? null,
+  facets.had_course_correction ? 1 : 0,
+  facets.course_correction_reason,
+  facets.iteration_count,
+  JSON.stringify(Array.isArray(facets.friction_points) ? facets.friction_points : []),
+  JSON.stringify(normalizedPatterns),
+  analysisVersion,
   );
-}
+  }
+
+  /**
+  * Update the generated_title for a session.
+  */
+  export function updateSessionTitle(sessionId: string, title: string): void {
+  const db = getDb();
+  db.prepare('UPDATE sessions SET generated_title = ? WHERE id = ? AND deleted_at IS NULL')
+  .run(title.slice(0, 120), sessionId);
+  }
