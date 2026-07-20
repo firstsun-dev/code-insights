@@ -21,7 +21,7 @@ import {
   User,
 } from 'lucide-react';
 
-type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral';
+type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'openai-compatible';
 
 interface ProviderInfo {
   id: LLMProvider;
@@ -98,6 +98,15 @@ const PROVIDERS: ProviderInfo[] = [
       { id: 'codestral-latest', name: 'Codestral' },
     ],
   },
+  {
+    id: 'openai-compatible',
+    name: 'OpenAI Compatible',
+    requiresApiKey: true,
+    apiKeyLink: undefined,
+    models: [
+      { id: 'custom', name: 'Custom model', description: 'Enter your model ID below' },
+    ],
+  },
 ];
 
 export default function SettingsPage() {
@@ -139,7 +148,7 @@ export default function SettingsPage() {
   const [cloudDiscoveredModels, setCloudDiscoveredModels] = useState<Array<{ id: string; name: string }>>([]);
   const [ollamaCorsOpen, setOllamaCorsOpen] = useState(false);
 
-  // Populate form from loaded config
+  // Populate form from loaded config (only when config loads)
   useEffect(() => {
     if (!llmConfig) return;
     if (llmConfig.provider) {
@@ -148,14 +157,14 @@ export default function SettingsPage() {
     }
     if (llmConfig.model) {
       // If saved model doesn't match any preset, populate the custom input instead
-      const providerInfo = PROVIDERS.find((p) => p.id === (llmConfig.provider ?? llmProvider));
+      const providerInfo = PROVIDERS.find((p) => p.id === llmConfig.provider);
       const isPreset = providerInfo?.models.some((m) => m.id === llmConfig.model);
       if (isPreset) {
         setLlmModel(llmConfig.model);
         setCustomModel('');
       } else {
         setCustomModel(llmConfig.model);
-        setLlmModel(providerInfo?.models[0]?.id ?? '');
+        setLlmModel(providerInfo?.models[0]?.id ?? 'custom');
       }
     }
     // apiKey is masked by server — leave blank for re-entry
@@ -595,6 +604,22 @@ export default function SettingsPage() {
                 </CollapsibleContent>
               </Collapsible>
             </>
+          )}
+
+          {/* OpenAI Compatible: Base URL */}
+          {llmProvider === 'openai-compatible' && (
+            <div>
+              <label className="text-sm font-medium">Base URL</label>
+              <Input
+                value={llmBaseUrl}
+                onChange={(e) => setLlmBaseUrl(e.target.value)}
+                placeholder="https://api.together.ai"
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                The base URL for the OpenAI-compatible API (e.g. https://api.together.ai, https://api.groq.com)
+              </p>
+            </div>
           )}
 
           {/* Error message */}

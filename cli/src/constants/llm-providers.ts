@@ -74,6 +74,15 @@ export const PROVIDERS: ProviderInfo[] = [
     ],
   },
   {
+    id: 'openai-compatible',
+    name: 'OpenAI Compatible',
+    requiresApiKey: true,
+    apiKeyLink: undefined,
+    models: [
+      { id: 'custom', name: 'Custom model', description: 'Enter your model ID below' },
+    ],
+  },
+  {
     id: 'mistral',
     name: 'Mistral',
     requiresApiKey: true,

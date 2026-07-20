@@ -70,9 +70,10 @@ type LLMChatFn = (messages: LLMMessage[]) => Promise<LLMResponse>;
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-function makeOpenAIChat(apiKey: string, model: string): LLMChatFn {
+function makeOpenAIChat(apiKey: string, model: string, baseUrl?: string): LLMChatFn {
+  const endpoint = baseUrl ? `${baseUrl.replace(/\/$/, '')}/v1/chat/completions` : 'https://api.openai.com/v1/chat/completions';
   return async (messages) => {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -275,13 +276,14 @@ function makeMistralChat(apiKey: string, model: string): LLMChatFn {
 
 function makeChatFn(config: LLMProviderConfig, resolvedApiKey: string | undefined): LLMChatFn {
   switch (config.provider) {
-    case 'openai':    return makeOpenAIChat(resolvedApiKey ?? '', config.model);
-    case 'anthropic': return makeAnthropicChat(resolvedApiKey ?? '', config.model);
-    case 'gemini':    return makeGeminiChat(resolvedApiKey ?? '', config.model);
-    case 'ollama':     return makeOllamaChat(config.model, config.baseUrl);
-    case 'openrouter': return makeOpenRouterChat(resolvedApiKey ?? '', config.model);
-    case 'mistral':    return makeMistralChat(resolvedApiKey ?? '', config.model);
-    default:           throw new Error(`Unknown LLM provider: ${(config as LLMProviderConfig).provider}`);
+    case 'openai':         return makeOpenAIChat(resolvedApiKey ?? '', config.model);
+    case 'anthropic':      return makeAnthropicChat(resolvedApiKey ?? '', config.model);
+    case 'gemini':         return makeGeminiChat(resolvedApiKey ?? '', config.model);
+    case 'ollama':         return makeOllamaChat(config.model, config.baseUrl);
+    case 'openrouter':     return makeOpenRouterChat(resolvedApiKey ?? '', config.model);
+    case 'mistral':        return makeMistralChat(resolvedApiKey ?? '', config.model);
+    case 'openai-compatible': return makeOpenAIChat(resolvedApiKey ?? '', config.model, config.baseUrl);
+    default:               throw new Error(`Unknown LLM provider: ${(config as LLMProviderConfig).provider}`);
   }
 }
 
