@@ -166,8 +166,10 @@ export function fetchSearch(params: { q: string; limit?: number }) {
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
-export function fetchDashboardStats(range: '7d' | '30d' | '90d' | 'all' = '7d') {
-  return request<{ range: string; stats: DashboardStats }>(`/analytics/dashboard?range=${range}`);
+export function fetchDashboardStats(range: '7d' | '30d' | '90d' | 'all' = '7d', homeId?: string) {
+  const q = new URLSearchParams({ range });
+  if (homeId) q.set('homeId', homeId);
+  return request<{ range: string; stats: DashboardStats }>(`/analytics/dashboard?${q}`);
 }
 
 // ── Analysis (Phase 4) ────────────────────────────────────────────────────────
