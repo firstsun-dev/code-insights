@@ -84,6 +84,17 @@ function showConfigAction(): void {
     console.log(chalk.gray(`    Same-proj:  ${r.sameProjectOnly !== false ? 'yes' : 'no'}`));
   }
 
+  // Personality — cognitive function scoring mode
+  {
+    const p = config.dashboard?.analysis?.personality;
+    const mode = p?.cognitiveFunctionScoring ?? 'formula';
+    console.log(chalk.white('\n  Personality (cognitive functions):'));
+    console.log(chalk.gray(`    Scoring:    ${mode}${mode === 'formula' ? ' (deterministic, default)' : ''}`));
+    if (mode === 'llm-vote') {
+      console.log(chalk.gray(`    Vote rounds: ${p?.llmVoteRounds ?? 3}`));
+    }
+  }
+
   // Telemetry — default is enabled; env vars can override at runtime
   console.log(chalk.white('\n  Telemetry:'));
   const telemetryEnabled = config.telemetry !== false;
@@ -105,7 +116,7 @@ export const configCommand = new Command('config')
 
 configCommand
   .command('set <key> <value>')
-  .description('Set a configuration value (telemetry)')
+  .description('Set a configuration value (telemetry, personality-scoring, personality-vote-rounds)')
   .action((key: string, value: string) => {
     if (key === 'telemetry') {
       if (value !== 'true' && value !== 'false') {
@@ -124,8 +135,52 @@ configCommand
       }
       console.log(chalk.green(`\nTelemetry ${value === 'true' ? 'enabled' : 'disabled'}.\n`));
       trackEvent('cli_config', { subcommand: 'set', success: true });
+    } else if (key === 'personality-scoring') {
+      if (value !== 'formula' && value !== 'llm-vote') {
+        console.error(chalk.red(`\nInvalid value "${value}". Must be "formula" or "llm-vote".\n`));
+        process.exit(1);
+      }
+      const existing = loadConfig() ?? { sync: { claudeDir: '~/.claude/projects', excludeProjects: [] } };
+      existing.dashboard = {
+        ...existing.dashboard,
+        analysis: {
+          ...existing.dashboard?.analysis,
+          personality: {
+            ...existing.dashboard?.analysis?.personality,
+            cognitiveFunctionScoring: value,
+          },
+        },
+      };
+      saveConfig(existing);
+      console.log(chalk.green(`\nCognitive function scoring set to "${value}".`));
+      if (value === 'llm-vote') {
+        console.log(chalk.gray('  Only applies when generating a new snapshot (Generate button / POST /generate) — requires an LLM configured via `code-insights config llm`.\n'));
+      } else {
+        console.log('');
+      }
+      trackEvent('cli_config', { subcommand: 'set', success: true });
+    } else if (key === 'personality-vote-rounds') {
+      const rounds = parseInt(value, 10);
+      if (!Number.isFinite(rounds) || rounds < 1 || rounds > 7) {
+        console.error(chalk.red(`\nInvalid value "${value}". Must be an integer between 1 and 7.\n`));
+        process.exit(1);
+      }
+      const existing = loadConfig() ?? { sync: { claudeDir: '~/.claude/projects', excludeProjects: [] } };
+      existing.dashboard = {
+        ...existing.dashboard,
+        analysis: {
+          ...existing.dashboard?.analysis,
+          personality: {
+            ...existing.dashboard?.analysis?.personality,
+            llmVoteRounds: rounds,
+          },
+        },
+      };
+      saveConfig(existing);
+      console.log(chalk.green(`\nLLM vote rounds set to ${rounds}.\n`));
+      trackEvent('cli_config', { subcommand: 'set', success: true });
     } else {
-      console.error(chalk.red(`\nUnknown config key "${key}". Available: telemetry.\n`));
+      console.error(chalk.red(`\nUnknown config key "${key}". Available: telemetry, personality-scoring, personality-vote-rounds.\n`));
       process.exit(1);
     }
   });

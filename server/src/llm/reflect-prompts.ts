@@ -279,3 +279,46 @@ topCandidates must contain exactly 5 distinct MBTI types, most likely first, and
 
 Respond with valid JSON only, wrapped in <json>...</json> tags.`;
 }
+
+// --- Cognitive function LLM-vote scoring (opt-in alternative to the deterministic
+// relative-frequency formula in cli/src/analysis/personality.ts computeCognitiveFunctions)
+//
+// Used by server/src/llm/personality-vote.ts scoreCognitiveFunctionsByLlmVote, only when
+// dashboard.analysis.personality.cognitiveFunctionScoring === 'llm-vote' in config.json.
+// Each round is one independent call to this prompt; the caller averages N rounds. Unlike
+// PERSONALITY_SYSTEM_PROMPT above (which only ever produces the one deliberate exception,
+// topCandidates[].likelihood), this prompt's entire job IS to produce the 8 cognitive
+// function scores — that's the whole point of 'llm-vote' mode, so every score here is
+// LLM-authored by design, not an accident to guard against.
+export const COGNITIVE_FUNCTION_VOTE_SYSTEM_PROMPT = `You are scoring a developer's 8 Jungian cognitive functions (Ni, Ne, Si, Se, Ti, Te, Fi, Fe) from a summary of effective coding patterns observed across their AI coding sessions.
+
+You will receive, for each of the 8 functions, the count of pattern instances mapped to it (out of the total across all 8) and a few example descriptions of what was observed.
+
+CRITICAL — scores MUST be differentiated, not uniform:
+- These 8 functions are a competing/relative construct: real strength in one implies relatively less reliance on others, not that all 8 are independently "good."
+- A function with zero or near-zero observed instances (relative to the total) must score low (0-20), never omitted or defaulted upward.
+- A function that dominates the observed instances should score high (65-100).
+- Do not assign every function a similar mid-to-high score just because some signal exists for each — that defeats the purpose of this exercise. Spread the 8 scores out to reflect genuine relative differences in the evidence.
+- Ground every score in the counts and examples given. Do not invent evidence.
+
+Respond with valid JSON only, wrapped in <json>...</json> tags, containing exactly these 8 integer keys (0-100 each): ni, ne, si, se, ti, te, fi, fe.`;
+
+export function generateCognitiveFunctionVotePrompt(
+  functionSummaries: Array<{ key: string; count: number; totalCount: number; examples: string[] }>,
+): string {
+  const lines = functionSummaries.map(f => {
+    const exampleText = f.examples.length > 0
+      ? f.examples.map(e => `    - ${e}`).join('\n')
+      : '    (no observed instances)';
+    return `  ${f.key}: ${f.count} of ${f.totalCount} total pattern instances\n${exampleText}`;
+  });
+
+  return `Score all 8 cognitive functions from this evidence summary:
+
+${lines.join('\n\n')}
+
+Respond with this JSON format (all 8 keys required, integers 0-100):
+{ "ni": 0, "ne": 0, "si": 0, "se": 0, "ti": 0, "te": 0, "fi": 0, "fe": 0 }
+
+Respond with valid JSON only, wrapped in <json>...</json> tags.`;
+}

@@ -371,7 +371,7 @@ export type CognitiveFunctionKey = 'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi
 
 export interface CognitiveFunctionScore {
   key: CognitiveFunctionKey;
-  score: number | null;      // 0-100 normalized mean confidence; null = insufficient data
+  score: number | null;      // 0-100, relative-frequency scoring (formula mode) or LLM-vote average (llm-vote mode); null = insufficient data
   band?: 'low' | 'moderate' | 'high';
   sampleSize: number;         // contributing effective-pattern instances; 0 = insufficient data
 }
@@ -410,6 +410,10 @@ export interface PersonalityProfile {
   axis: PersonalityBipolarAxis;      // explorer_executor
   pace: PersonalityPace;
   cognitiveFunctions: CognitiveFunctionScore[];  // all 8, stable order: ni, ne, si, se, ti, te, fi, fe
+  /** Which method produced `cognitiveFunctions` (and therefore `mbti`). Absent on rows
+   * persisted before this field existed — treat as 'formula', the only mode that existed
+   * then. 'llm-vote' only ever comes from POST /generate. */
+  cognitiveFunctionScoringMode?: 'formula' | 'llm-vote';
   mbti: MBTIProfile;
   archetype?: PersonalityArchetype;
   computedAt: string;                 // ISO 8601
@@ -462,6 +466,18 @@ export interface ClaudeInsightConfig {
         topK?: number;
         similarityThreshold?: number;
         sameProjectOnly?: boolean;
+      };
+      personality?: {
+        /** How the 8 Jungian cognitive function scores are computed. 'formula' (default)
+         * is the deterministic relative-frequency scoring in cli/src/analysis/personality.ts
+         * (no LLM call, always available). 'llm-vote' calls the LLM llmVoteRounds times to
+         * independently score all 8 functions and averages the results — see
+         * scoreCognitiveFunctionsByLlmVote in server/src/llm/personality-vote.ts. Only takes
+         * effect on POST /generate (which has LLM access); GET / always uses 'formula'. */
+        cognitiveFunctionScoring?: 'formula' | 'llm-vote';
+        /** Number of independent LLM scoring rounds to average when cognitiveFunctionScoring
+         * is 'llm-vote'. Clamped to [1, 7]. Default 3. */
+        llmVoteRounds?: number;
       };
     };
   };
