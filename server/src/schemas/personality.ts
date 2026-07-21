@@ -39,12 +39,50 @@ export const PersonalityArchetypeSchema = z
   })
   .openapi('PersonalityArchetype');
 
+export const CognitiveFunctionKeySchema = z.enum(['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe']);
+
+export const CognitiveFunctionScoreSchema = z
+  .object({
+    key: CognitiveFunctionKeySchema,
+    score: z.number().nullable(),
+    band: z.enum(['low', 'moderate', 'high']).optional(),
+    sampleSize: z.number(),
+  })
+  .openapi('CognitiveFunctionScore');
+
+export const MBTITypeSchema = z.enum([
+  'INTJ', 'INTP', 'ENTJ', 'ENTP',
+  'INFJ', 'INFP', 'ENFJ', 'ENFP',
+  'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+  'ISTP', 'ISFP', 'ESTP', 'ESFP',
+]);
+
+export const MBTICandidateSchema = z
+  .object({
+    type: MBTITypeSchema,
+    rank: z.number(),
+    likelihood: z.number(),
+    reasoning: z.string(),
+  })
+  .openapi('MBTICandidate');
+
+export const MBTIProfileSchema = z
+  .object({
+    type: MBTITypeSchema.nullable(),
+    functionStack: z.array(CognitiveFunctionKeySchema).nullable(),
+    confidence: z.enum(['low', 'moderate', 'high']).nullable(),
+    topCandidates: z.array(MBTICandidateSchema).optional(),
+  })
+  .openapi('MBTIProfile');
+
 export const PersonalityProfileSchema = z
   .object({
-    profileVersion: z.literal(1),
+    profileVersion: z.union([z.literal(1), z.literal(2)]),
     traits: z.array(PersonalityTraitSchema),
     axis: PersonalityBipolarAxisSchema,
     pace: PersonalityPaceSchema,
+    cognitiveFunctions: z.array(CognitiveFunctionScoreSchema),
+    mbti: MBTIProfileSchema,
     archetype: PersonalityArchetypeSchema.optional(),
     computedAt: z.string(),
     analysisVersion: z.string(),
