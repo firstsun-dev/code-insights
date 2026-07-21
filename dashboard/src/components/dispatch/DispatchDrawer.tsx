@@ -31,8 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { generateDispatch } from '@/lib/api';
 import { PostOverlay } from './PostOverlay';
-import type { Insight, DispatchPrefill } from '@/lib/types';
-import type { DispatchTone, DispatchFormat, DispatchResponse } from '@/lib/api';
+import type { Insight, DispatchPrefill, DispatchTone, DispatchFormat, DispatchResponse } from '@/lib/types';
 
 const FORMAT_OPTIONS: { value: DispatchFormat; label: string; description: string }[] = [
   { value: 'blog', label: 'Blog post', description: 'Full narrative, 800-1000 words, markdown ready to paste to dev.to / Hashnode' },

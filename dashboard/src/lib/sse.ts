@@ -11,7 +11,11 @@
 export async function* parseSSEStream(
   body: ReadableStream<Uint8Array>
 ): AsyncGenerator<{ event: string; data: string }> {
-  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  // TS 5.7+'s lib.dom types TextDecoderStream.writable as WritableStream<BufferSource>,
+  // which no longer structurally matches ReadableWritablePair<string, Uint8Array<ArrayBufferLike>>.
+  // The runtime behavior is unaffected — only the type shape needs coercing.
+  const decoder = new TextDecoderStream() as unknown as TransformStream<Uint8Array<ArrayBufferLike>, string>;
+  const reader = body.pipeThrough(decoder).getReader();
   let buffer = '';
   let currentEvent = '';
   let currentData = '';

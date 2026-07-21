@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Copy, Download, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { DispatchResponse } from '@/lib/api';
+import type { DispatchResponse } from '@/lib/types';
 
 interface PostPreviewProps {
   result: DispatchResponse;
