@@ -294,19 +294,24 @@ const PATTERN_TO_FUNCTION: Record<string, string> = {
 };
 
 describe('computePersonalityProfile — cognitive functions', () => {
-  it('scores all 8 functions from mean confidence of their mapped pattern category', () => {
+  it('scores each function by its relative share of pattern instances, not mean confidence', () => {
+    // 8 instances total: ni gets 2 (2x the 1/8 "fair share" -> capped at 100), six other
+    // functions get exactly 1 each (exactly fair share -> 50/moderate), fe gets 0 (-> null).
+    // Confidence is deliberately uniform (all 80) to prove the score no longer tracks it —
+    // this is the fix for the old formula's "everything lands >=65 because confidence has a
+    // 70 floor" bug (see computeCognitiveFunctions' doc comment in ../personality.ts).
     const facets: PersonalityFacetInput[] = [
       facet({
         effectivePatterns: [
-          ep({ category: 'structured-planning', confidence: 90 }),
-          ep({ category: 'structured-planning', confidence: 70 }), // ni: (90+70)/2 = 80
-          ep({ category: 'context-gathering', confidence: 60 }),   // ne: 60
-          ep({ category: 'domain-expertise', confidence: 40 }),    // si: 40
-          ep({ category: 'incremental-implementation', confidence: 100 }), // se: 100
-          ep({ category: 'systematic-debugging', confidence: 55 }), // ti: 55
-          ep({ category: 'verification-workflow', confidence: 65 }), // te: 65
-          ep({ category: 'self-correction', confidence: 20 }),      // fi: 20
-          ep({ category: 'effective-tooling', confidence: 75 }),    // fe: 75
+          ep({ category: 'structured-planning', confidence: 80 }), // ni
+          ep({ category: 'structured-planning', confidence: 80 }), // ni (2nd instance)
+          ep({ category: 'context-gathering', confidence: 80 }),   // ne
+          ep({ category: 'domain-expertise', confidence: 80 }),    // si
+          ep({ category: 'incremental-implementation', confidence: 80 }), // se
+          ep({ category: 'systematic-debugging', confidence: 80 }), // ti
+          ep({ category: 'verification-workflow', confidence: 80 }), // te
+          ep({ category: 'self-correction', confidence: 80 }),      // fi
+          // effective-tooling (fe) deliberately absent
         ],
       }),
     ];
@@ -316,15 +321,44 @@ describe('computePersonalityProfile — cognitive functions', () => {
     // Stable order check
     expect(profile.cognitiveFunctions.map(f => f.key)).toEqual(['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe']);
 
-    expect(cogFn(profile.cognitiveFunctions, 'ni').score).toBe(80);
+    expect(cogFn(profile.cognitiveFunctions, 'ni').score).toBe(100);
     expect(cogFn(profile.cognitiveFunctions, 'ni').sampleSize).toBe(2);
-    expect(cogFn(profile.cognitiveFunctions, 'ne').score).toBe(60);
-    expect(cogFn(profile.cognitiveFunctions, 'si').score).toBe(40);
-    expect(cogFn(profile.cognitiveFunctions, 'se').score).toBe(100);
-    expect(cogFn(profile.cognitiveFunctions, 'ti').score).toBe(55);
-    expect(cogFn(profile.cognitiveFunctions, 'te').score).toBe(65);
-    expect(cogFn(profile.cognitiveFunctions, 'fi').score).toBe(20);
-    expect(cogFn(profile.cognitiveFunctions, 'fe').score).toBe(75);
+    for (const key of ['ne', 'si', 'se', 'ti', 'te', 'fi']) {
+      expect(cogFn(profile.cognitiveFunctions, key).score).toBe(50);
+      expect(cogFn(profile.cognitiveFunctions, key).sampleSize).toBe(1);
+    }
+
+    const fe = cogFn(profile.cognitiveFunctions, 'fe');
+    expect(fe.score).toBeNull();
+    expect(fe.sampleSize).toBe(0);
+    expect(fe.band).toBeUndefined();
+  });
+
+  it('differentiates functions purely by relative frequency even when confidence is identical', () => {
+    // se: 2 instances, fi: 1 instance, plus 6 one-off fillers spread across the other
+    // categories so neither se nor fi's share hits the 2x-fair-share cap (which would make
+    // both saturate at 100 and hide the ordering this test is checking for).
+    const facets: PersonalityFacetInput[] = [
+      facet({
+        effectivePatterns: [
+          ep({ category: 'incremental-implementation', confidence: 95 }), // se
+          ep({ category: 'incremental-implementation', confidence: 95 }), // se
+          ep({ category: 'self-correction', confidence: 95 }),            // fi
+          ep({ category: 'structured-planning', confidence: 95 }),        // ni filler
+          ep({ category: 'context-gathering', confidence: 95 }),          // ne filler
+          ep({ category: 'domain-expertise', confidence: 95 }),           // si filler
+          ep({ category: 'systematic-debugging', confidence: 95 }),       // ti filler
+          ep({ category: 'verification-workflow', confidence: 95 }),      // te filler
+          ep({ category: 'effective-tooling', confidence: 95 }),          // fe filler
+        ],
+      }),
+    ];
+    const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+    const se = cogFn(profile.cognitiveFunctions, 'se');
+    const fi = cogFn(profile.cognitiveFunctions, 'fi');
+    expect(se.score).not.toBeNull();
+    expect(fi.score).not.toBeNull();
+    expect(se.score!).toBeGreaterThan(fi.score!);
   });
 
   it('is null with sampleSize 0 for a function whose category has zero pattern instances', () => {
@@ -338,14 +372,28 @@ describe('computePersonalityProfile — cognitive functions', () => {
     expect(fe.band).toBeUndefined();
   });
 
-  it('maps each of the 8 known categories to its documented function independently', () => {
+  it('scores an isolated single-category sample at 100 — its entire share of the total', () => {
     for (const [category, fn] of Object.entries(PATTERN_TO_FUNCTION)) {
       const facets: PersonalityFacetInput[] = [
         facet({ effectivePatterns: [ep({ category, confidence: 88 })] }),
       ];
       const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
-      expect(cogFn(profile.cognitiveFunctions, fn).score).toBe(88);
+      expect(cogFn(profile.cognitiveFunctions, fn).score).toBe(100);
     }
+  });
+
+  it('returns all-null functions when there are zero effective pattern instances', () => {
+    const facets: PersonalityFacetInput[] = [facet({ effectivePatterns: [] })];
+    const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+    for (const f of profile.cognitiveFunctions) {
+      expect(f.score).toBeNull();
+      expect(f.sampleSize).toBe(0);
+    }
+  });
+
+  it('sets cognitiveFunctionScoringMode to formula (the only mode this pure function knows about)', () => {
+    const profile = computePersonalityProfile([facet()], [], '2026-W29', '__all__');
+    expect(profile.cognitiveFunctionScoringMode).toBe('formula');
   });
 });
 

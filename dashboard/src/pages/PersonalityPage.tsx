@@ -183,7 +183,7 @@ export default function PersonalityPage() {
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <ArchetypeCard archetype={profile.archetype} generating={generating} onGenerate={handleGenerate} />
-            <MbtiCard mbti={profile.mbti} functions={profile.cognitiveFunctions} />
+            <MbtiCard mbti={profile.mbti} functions={profile.cognitiveFunctions} scoringMode={profile.cognitiveFunctionScoringMode} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
