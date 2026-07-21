@@ -188,7 +188,7 @@ function parseCopilotSession(filePath: string): ParsedSession | null {
       if (!text && currentToolCalls.length === 0) return;
 
       messages.push({
-        id: `copilot-assistant-${messages.length}`,
+        id: `${sessionId}:assistant-${messages.length}`,
         sessionId: sessionId,
         type: 'assistant',
         content: text.slice(0, 10000),
@@ -251,7 +251,7 @@ function parseCopilotSession(filePath: string): ParsedSession | null {
           const userContent = extractText(data);
           if (userContent) {
             messages.push({
-              id: (data.id as string) || `copilot-user-${messages.length}`,
+              id: `${sessionId}:${(data.id as string) || `user-${messages.length}`}`,
               sessionId: sessionId,
               type: 'user',
               content: userContent.slice(0, 10000),
