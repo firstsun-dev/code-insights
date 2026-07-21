@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -27,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Sparkles, SearchX, X, FileText, GitCommit, BookOpen, Target } from 'lucide-react';
+import { Sparkles, SearchX, X, FileText, GitCommit, BookOpen, Target, ChevronDown } from 'lucide-react';
 import { getDateGroup, sortDateGroups } from '@/lib/utils';
 import { INSIGHT_TYPE_LABELS } from '@/lib/constants/colors';
 import { parseJsonField } from '@/lib/types';
@@ -84,6 +85,21 @@ export default function InsightsPage() {
     source: 'all',
     homeId: 'all',
   });
+
+  // Group collapse state — groups are expanded by default; keys added here are collapsed.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   // Dispatch selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -490,47 +506,57 @@ export default function InsightsPage() {
           {grouped.map((group) => {
             const sectionMeta = filters.view === 'type' ? TYPE_SECTION_ICONS[group.key] : null;
             const SectionIcon = sectionMeta?.icon;
+            const isOpen = !collapsedGroups.has(group.key);
 
             return (
-              <div key={group.key}>
-                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  {SectionIcon && <SectionIcon className={`h-3.5 w-3.5 ${sectionMeta.color}`} />}
-                  {group.label} ({group.count})
-                </h2>
-                <div className="rounded-md border overflow-hidden">
-                  {group.insights.map((insight) => {
-                    const isSelected = selectedIds.has(insight.id);
-                    const atMax = selectedIds.size >= MAX_DISPATCH_INSIGHTS;
-                    return (
-                      <div
-                        key={insight.id}
-                        className={`relative group/dispatch ${isSelected ? 'bg-primary/5' : ''}`}
-                      >
+              <Collapsible key={group.key} open={isOpen} onOpenChange={() => toggleGroup(group.key)}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 hover:text-foreground transition-colors"
+                    aria-expanded={isOpen}
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                    {SectionIcon && <SectionIcon className={`h-3.5 w-3.5 ${sectionMeta.color}`} />}
+                    {group.label} ({group.count})
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="rounded-md border overflow-hidden">
+                    {group.insights.map((insight) => {
+                      const isSelected = selectedIds.has(insight.id);
+                      const atMax = selectedIds.size >= MAX_DISPATCH_INSIGHTS;
+                      return (
                         <div
-                          className="absolute left-2 top-3 z-10 opacity-0 group-hover/dispatch:opacity-100 transition-opacity"
-                          onClick={(e) => e.stopPropagation()}
+                          key={insight.id}
+                          className={`relative group/dispatch ${isSelected ? 'bg-primary/5' : ''}`}
                         >
-                          <Checkbox
-                            checked={isSelected}
-                            disabled={!isSelected && atMax}
-                            onCheckedChange={() => handleToggleSelect(insight)}
-                            aria-label={`Select insight: ${insight.title}`}
-                          />
+                          <div
+                            className="absolute left-2 top-3 z-10 opacity-0 group-hover/dispatch:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              disabled={!isSelected && atMax}
+                              onCheckedChange={() => handleToggleSelect(insight)}
+                              aria-label={`Select insight: ${insight.title}`}
+                            />
+                          </div>
+                          <div className={`transition-[padding-left] ${isSelected ? 'pl-8' : 'group-hover/dispatch:pl-8'}`}>
+                            <InsightListItem
+                              insight={insight}
+                              showProject={filters.view !== 'project'}
+                              allInsightIds={allInsightIds}
+                              highlighted={insight.id === highlightedInsightId}
+                              defaultExpanded={insight.id === highlightedInsightId}
+                            />
+                          </div>
                         </div>
-                        <div className={`transition-[padding-left] ${isSelected ? 'pl-8' : 'group-hover/dispatch:pl-8'}`}>
-                          <InsightListItem
-                            insight={insight}
-                            showProject={filters.view !== 'project'}
-                            allInsightIds={allInsightIds}
-                            highlighted={insight.id === highlightedInsightId}
-                            defaultExpanded={insight.id === highlightedInsightId}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </div>
