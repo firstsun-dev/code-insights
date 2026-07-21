@@ -3,13 +3,6 @@ import { Folder, FolderOpen, MoreVertical, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -17,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { SOURCE_TOOLS } from '@/components/filters/SourceToolSelect';
+import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import type { Project } from '@/lib/types';
 import { EditProjectDialog } from '@/components/projects/EditProjectDialog';
 
@@ -39,6 +32,11 @@ export function ProjectNav({
   const [search, setSearch] = useState('');
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const showSearch = projects.length > 8;
+
+  const selectedSourceTools = useMemo(
+    () => selectedSource === 'all' ? [] : selectedSource.split(',').filter(Boolean),
+    [selectedSource]
+  );
 
   const totalSessions = useMemo(
     () => projects.reduce((sum, p) => sum + p.session_count, 0),
@@ -136,17 +134,11 @@ export function ProjectNav({
 
       {/* Source filter at bottom */}
       <div className="p-3 border-t">
-        <Select value={selectedSource} onValueChange={onSelectSource}>
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="All Sources" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            {SOURCE_TOOLS.map((tool) => (
-              <SelectItem key={tool.value} value={tool.value}>{tool.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SourceToolMultiSelect
+          value={selectedSourceTools}
+          onValueChange={(ids) => onSelectSource(ids.length > 0 ? ids.join(',') : 'all')}
+          className="h-8 text-xs w-full"
+        />
       </div>
 
       {editingProject && (
