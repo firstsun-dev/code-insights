@@ -65,6 +65,7 @@ export const AnalysisUsageRowSchema = z
     duration_ms: z.number().nullable(),
     chunk_count: z.number(),
     analyzed_at: z.string(),
+    analysis_status: z.enum(['fresh', 'stale']),
   })
   .openapi('AnalysisUsageRow');
 
