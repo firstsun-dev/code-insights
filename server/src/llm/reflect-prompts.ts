@@ -183,29 +183,44 @@ Respond with valid JSON only, wrapped in <json>...</json> tags.`;
 
 // --- Personality Archetype (prose only — never trust numeric output from this prompt) ---
 //
-// This prompt is deliberately fed ONLY the 6 already-computed scores (4 unipolar traits
-// + the explorer/executor axis + pace), never the raw facet/insight data those scores
-// were derived from. The LLM's job is purely descriptive narration of numbers it did not
+// This prompt is deliberately fed ONLY already-computed scores (4 unipolar traits, the
+// explorer/executor axis, pace, the 8 cognitive function scores, and the deterministic
+// MBTI type + function stack), never the raw facet/insight data those scores were
+// derived from. The LLM's job is purely descriptive narration of numbers it did not
 // produce and cannot recompute — every numeric field on PersonalityProfile always comes
-// from cli/src/analysis/personality.ts's deterministic scoring, never from this call.
-// The response schema below is intentionally flat (string / string[] only, no nested
-// objects, no numbers) so it survives extractJsonPayload's balanced-brace fallback
-// degradation gracefully — see cli/src/analysis/response-parsers.ts.
+// from cli/src/analysis/personality.ts's deterministic scoring, never from this call,
+// with ONE deliberate exception: `topCandidates[].likelihood`. That field only exists
+// because the user explicitly asked for an LLM-ranked "top 5 most likely MBTI types with
+// reasoning" — ranking requires a number, so this prompt is allowed to produce that one.
+// It must never be read as a replacement for the deterministic `mbti.type` — it's a
+// separate, softer, LLM-authored companion view over the same underlying function scores.
+// The rest of the response schema stays flat (string / string[] only) so it survives
+// extractJsonPayload's balanced-brace fallback degradation gracefully — see
+// cli/src/analysis/response-parsers.ts. Every field of every topCandidates entry is
+// re-validated and clamped server-side in server/src/routes/personality.ts — nothing
+// from this call is trusted as-is.
 
-export const PERSONALITY_SYSTEM_PROMPT = `You are writing a short personality archetype narrative based on 6 pre-computed scores from a developer's AI coding sessions: four unipolar traits (Precision, Resilience, Autonomy, Craft, each 0-100 or null), one bipolar axis (Explorer <-> Executor, -100 to +100 or null), and a Pace score (0-100 or null, deliberate to rapid).
+export const PERSONALITY_SYSTEM_PROMPT = `You are writing a short personality archetype narrative, plus a ranked top-5 MBTI type guess list, based on pre-computed scores from a developer's AI coding sessions: four unipolar traits (Precision, Resilience, Autonomy, Craft, each 0-100 or null), one bipolar axis (Explorer <-> Executor, -100 to +100 or null), a Pace score (0-100 or null, deliberate to rapid), 8 Jungian cognitive function scores (Ni, Ne, Si, Se, Ti, Te, Fi, Fe, each 0-100 or null), and a deterministically-derived MBTI type + function stack (dominant/auxiliary/tertiary/inferior) computed from those 8 function scores by a fixed formula.
 
-RULES:
-- Describe based ONLY on the 6 given scores. Never restate raw numbers in prose (no "your Precision is 72" — describe qualitatively instead).
+RULES FOR THE NARRATIVE:
+- Describe based ONLY on the given scores. Never restate raw numbers in prose (no "your Precision is 72" — describe qualitatively instead).
 - Never invent or infer new numeric values.
-- Use band language for the 4 unipolar traits: 65-100 = high, 35-64 = moderate, 0-34 = low.
+- Use band language for the 4 unipolar traits and the 8 cognitive functions: 65-100 = high, 35-64 = moderate, 0-34 = low.
 - Use band language for the axis: +34 to +100 = Executor-leaning, -33 to +33 = Balanced, -100 to -34 = Explorer-leaning.
-- If a trait's score is null, omit it entirely from your narrative — never say "data unavailable" or similar. Null means there wasn't enough data yet, not that the trait is absent; don't editorialize about the gap.
+- If a score is null, omit it entirely from your narrative — never say "data unavailable" or similar. Null means there wasn't enough data yet, not that the trait/function is absent; don't editorialize about the gap.
 - Write the narrative in second person ("You tend to...").
 - Generate a tagline: an empowering, specific 2-4 word archetype label in title case, maximum 40 characters (e.g. "The Deliberate Craftsperson", "Resilient Explorer", "Precision-Driven Executor"). Never critical or negative.
 - Generate a tagline_subtitle: a single short sentence (<=80 chars) that elaborates on the tagline with a specific behavioral observation.
 - Write narrative as exactly 2-3 sentences, second person, grounded only in the given scores.
 - List 2-3 strengths as short phrases (<=8 words each), grounded in whichever traits scored high.
 - List 0-2 growthAreas as short phrases (<=8 words each), grounded in whichever traits scored low or moderate. Return an empty array if nothing qualifies — never invent one to fill the list.
+
+RULES FOR topCandidates (top-5 MBTI type guesses):
+- Return EXACTLY 5 distinct MBTI types (one of the 16 four-letter codes each), ordered most-likely first.
+- If a deterministic type was given, it MUST appear somewhere in your 5 guesses (it doesn't have to be rank 1 — you may judge another type fits the qualitative pattern of scores better, but it cannot be absent entirely, since it's the one formula-backed answer you were given).
+- Base your ranking on the qualitative pattern across the 8 cognitive function scores and the 4 traits together — not on the deterministic type/stack alone; use your own judgment about which type's typical function ordering best fits the overall shape of the scores.
+- likelihood is your own 0-100 relative-confidence estimate for that specific guess (need not sum to 100 across the 5 — each is independent). Higher-ranked guesses should generally have higher or equal likelihood than lower-ranked ones.
+- reasoning is 1-2 sentences, grounded only in the given scores (which functions/traits support or work against this type), second person, never inventing new numeric claims.
 
 Respond with valid JSON only, wrapped in <json>...</json> tags.`;
 
@@ -216,6 +231,9 @@ export function generatePersonalityPrompt(data: {
   craft: number | null;
   explorerExecutorAxis: number | null;
   pace: number | null;
+  cognitiveFunctions?: Partial<Record<'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi' | 'fe', number | null>>;
+  deterministicMbtiType?: string | null;
+  deterministicFunctionStack?: string[] | null;
   dominantWorkflow?: string;
   dominantCharacter?: string;
 }): string {
@@ -226,6 +244,9 @@ export function generatePersonalityPrompt(data: {
     craft: data.craft,
     explorerExecutorAxis: data.explorerExecutorAxis,
     pace: data.pace,
+    cognitiveFunctions: data.cognitiveFunctions ?? null,
+    deterministicMbtiType: data.deterministicMbtiType ?? null,
+    deterministicFunctionStack: data.deterministicFunctionStack ?? null,
   };
 
   const contextLines: string[] = [];
@@ -233,9 +254,9 @@ export function generatePersonalityPrompt(data: {
   if (data.dominantCharacter) contextLines.push(`Dominant session type: ${data.dominantCharacter}`);
   const contextSection = contextLines.length > 0 ? `\n\nCONTEXT (optional, supplementary):\n${contextLines.join('\n')}` : '';
 
-  return `Write a personality archetype narrative based on these pre-computed scores.
+  return `Write a personality archetype narrative and a ranked top-5 MBTI type guess list based on these pre-computed scores.
 
-SCORES (0-100 for unipolar traits and pace, -100 to +100 for the axis; null = insufficient data):
+SCORES (0-100 for unipolar traits, pace, and cognitive functions; -100 to +100 for the axis; null = insufficient data):
 ${JSON.stringify(scores, null, 2)}${contextSection}
 
 Respond with this JSON format:
@@ -244,8 +265,17 @@ Respond with this JSON format:
   "tagline_subtitle": "single sentence <=80 chars elaborating on the tagline",
   "narrative": "2-3 sentence second-person personality description",
   "strengths": ["short phrase", "short phrase"],
-  "growthAreas": []
+  "growthAreas": [],
+  "topCandidates": [
+    { "type": "INTJ", "likelihood": 78, "reasoning": "1-2 sentence explanation grounded in the given scores" },
+    { "type": "INTP", "likelihood": 65, "reasoning": "..." },
+    { "type": "...", "likelihood": 0, "reasoning": "..." },
+    { "type": "...", "likelihood": 0, "reasoning": "..." },
+    { "type": "...", "likelihood": 0, "reasoning": "..." }
+  ]
 }
+
+topCandidates must contain exactly 5 distinct MBTI types, most likely first, and must include the deterministicMbtiType above if one was given.
 
 Respond with valid JSON only, wrapped in <json>...</json> tags.`;
 }

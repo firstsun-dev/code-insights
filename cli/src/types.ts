@@ -382,10 +382,26 @@ export type MBTIType =
   | 'ISTJ' | 'ISFJ' | 'ESTJ' | 'ESFJ'
   | 'ISTP' | 'ISFP' | 'ESTP' | 'ESFP';
 
+// LLM-authored ranked guess, deliberately NOT part of the deterministic scoring in
+// cli/src/analysis/personality.ts. `likelihood` is an intentional exception to this
+// feature's "the LLM never produces a number" rule (see file header there and
+// PERSONALITY_SYSTEM_PROMPT in server/src/llm/reflect-prompts.ts) — the request this
+// exists to serve IS a ranking, so the number is unavoidable. It expresses the LLM's
+// own relative confidence across its 5 guesses, not a recomputation of any trait/
+// function score. Always optional/absent until POST /generate has run once, same
+// lifecycle as `archetype`.
+export interface MBTICandidate {
+  type: MBTIType;
+  rank: number;         // 1 (most likely) .. 5, reassigned server-side from array order — never trusts the LLM's own rank field
+  likelihood: number;    // 0-100, LLM-estimated relative confidence; clamped/rounded server-side
+  reasoning: string;     // <=2 sentences, grounded in the given function/trait scores
+}
+
 export interface MBTIProfile {
   type: MBTIType | null;
   functionStack: CognitiveFunctionKey[] | null; // [dominant, auxiliary, tertiary, inferior]
   confidence: 'low' | 'moderate' | 'high' | null;
+  topCandidates?: MBTICandidate[]; // LLM-ranked top-5 guesses with reasoning; absent until generated
 }
 
 export interface PersonalityProfile {

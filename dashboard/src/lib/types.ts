@@ -142,10 +142,18 @@ export type MBTIType =
   | 'ISTJ' | 'ISFJ' | 'ESTJ' | 'ESFJ'
   | 'ISTP' | 'ISFP' | 'ESTP' | 'ESFP';
 
+export interface MBTICandidate {
+  type: MBTIType;
+  rank: number;
+  likelihood: number;
+  reasoning: string;
+}
+
 export interface MBTIProfile {
   type: MBTIType | null;
   functionStack: CognitiveFunctionKey[] | null;
   confidence: 'low' | 'moderate' | 'high' | null;
+  topCandidates?: MBTICandidate[];
 }
 
 export interface PersonalityProfile {
