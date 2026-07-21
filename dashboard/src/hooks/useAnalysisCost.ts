@@ -13,6 +13,7 @@ export interface AnalysisUsageRow {
   duration_ms: number | null;
   chunk_count: number;
   analyzed_at: string;            // ISO 8601
+  analysis_status: 'fresh' | 'stale';
 }
 
 export interface AnalysisCostData {

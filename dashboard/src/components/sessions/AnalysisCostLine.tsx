@@ -3,15 +3,26 @@
 // Deliberately separated from VitalsStrip (which shows the coding session cost).
 // Clicking opens a Popover with per-analysis-type breakdown.
 
-import { Sparkles } from 'lucide-react';
+import { Sparkles, RefreshCw } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Badge } from '@/components/ui/badge';
 import { useAnalysisCost } from '@/hooks/useAnalysisCost';
 import { formatCost } from '@/lib/cost-utils';
 import { formatTokenCount } from '@/lib/utils';
+
+/** Shown when the session's source content changed since this analysis ran (see analysis_usage.analysis_status). */
+function StaleBadge() {
+  return (
+    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+      <RefreshCw className="h-3 w-3 mr-1" />
+      Outdated
+    </Badge>
+  );
+}
 
 interface AnalysisCostLineProps {
   sessionId: string;
@@ -55,6 +66,7 @@ export function AnalysisCostLine({ sessionId, isAnalyzing }: AnalysisCostLinePro
   const { usage, totalCostUsd, cacheSavingsUsd } = data;
   const allNative = usage.every(row => row.provider === 'claude-code-native');
   const allOllama = usage.every(row => row.provider === 'ollama' || row.provider === 'llamacpp');
+  const hasStale = usage.some(row => row.analysis_status === 'stale');
 
   // Use the model and provider from the first usage row for the sublabel
   const firstRow = usage[0];
@@ -89,6 +101,7 @@ export function AnalysisCostLine({ sessionId, isAnalyzing }: AnalysisCostLinePro
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-purple-500 shrink-0" />
           <span>{nativeLabel}</span>
+          {hasStale && <StaleBadge />}
         </div>
         <div className="text-[10px] text-muted-foreground/60 pl-5">{modelLabel}</div>
       </div>
@@ -108,6 +121,7 @@ export function AnalysisCostLine({ sessionId, isAnalyzing }: AnalysisCostLinePro
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-purple-500 shrink-0" />
         <span>{primaryText}</span>
+        {hasStale && <StaleBadge />}
       </div>
       {!isLegacy && (
         <div className="text-[10px] text-muted-foreground/60 pl-5">{sublabel}</div>
@@ -141,8 +155,9 @@ export function AnalysisCostLine({ sessionId, isAnalyzing }: AnalysisCostLinePro
               <div key={idx}>
                 {idx > 0 && <div className="border-t my-2" />}
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
                     {analysisTypeLabel(row.analysis_type)}
+                    {row.analysis_status === 'stale' && <StaleBadge />}
                   </span>
                   <span className="text-xs font-medium text-foreground shrink-0">
                     {row.provider === 'ollama' || row.provider === 'llamacpp' || row.provider === 'claude-code-native' ? 'free' : formatCost(row.estimated_cost_usd)}
