@@ -103,6 +103,55 @@ describe('Personality routes', () => {
     testDb.close();
   });
 
+  describe('GET /api/personality', () => {
+    it('serves a cached snapshot as-is when its profileVersion matches the current version', async () => {
+      seedSnapshot('2026-W30', '__all__', {
+        results_json: JSON.stringify({ profileVersion: 2, sessionCount: 3, marker: 'from-cache' }),
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/personality?period=2026-W30');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.marker).toBe('from-cache');
+    });
+
+    it('ignores a cached snapshot missing profileVersion (pre-MBTI schema) and recomputes fresh instead', async () => {
+      // Simulates a snapshot persisted before the cognitiveFunctions + mbti addition —
+      // no profileVersion field at all, so it JSON.parses fine but is missing fields the
+      // frontend (MbtiCard, CognitiveFunctionRadarChart) unconditionally reads, which used
+      // to crash the dashboard. readSnapshot must treat this as a cache miss.
+      seedSnapshot('2026-W30', '__all__', {
+        results_json: JSON.stringify({ sessionCount: 3, marker: 'stale-pre-v2-cache' }),
+      });
+      seedProject('proj-1', 'alpha');
+      seedSession('sess-1', 'proj-1', { project_id: 'proj-1', started_at: '2026-07-20T10:00:00Z' });
+      seedFacets('sess-1');
+
+      const app = createApp();
+      const res = await app.request('/api/personality?period=2026-W30');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.marker).toBeUndefined();
+      expect(body.profileVersion).toBe(2);
+      expect(body.mbti).toBeDefined();
+      expect(body.cognitiveFunctions).toBeDefined();
+    });
+
+    it('ignores a cached snapshot with an old numeric profileVersion (1) and recomputes fresh instead', async () => {
+      seedSnapshot('2026-W30', '__all__', {
+        results_json: JSON.stringify({ profileVersion: 1, sessionCount: 3, marker: 'stale-v1-cache' }),
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/personality?period=2026-W30');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.marker).toBeUndefined();
+      expect(body.profileVersion).toBe(2);
+    });
+  });
+
   describe('GET /api/personality/projects', () => {
     it('returns empty array when no projects have facet-analyzed sessions', async () => {
       seedProject('proj-1', 'alpha');
