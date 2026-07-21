@@ -13,6 +13,7 @@
 import { loadConfig } from '../utils/config.js';
 import type { LLMProviderConfig, LLMProvider } from '../types.js';
 import type { AnalysisRunner, RunAnalysisParams, RunAnalysisResult } from './runner-types.js';
+import { sanitizeForUtf8 } from './unicode.js';
 
 /**
  * Mapping from provider ID to its standard API key environment variable.
@@ -330,8 +331,8 @@ export class ProviderRunner implements AnalysisRunner {
     const start = Date.now();
 
     const messages: LLMMessage[] = [
-      { role: 'system', content: params.systemPrompt },
-      { role: 'user', content: params.userPrompt },
+      { role: 'system', content: sanitizeForUtf8(params.systemPrompt) },
+      { role: 'user', content: sanitizeForUtf8(params.userPrompt) },
     ];
 
     const response = await this.chat(messages);

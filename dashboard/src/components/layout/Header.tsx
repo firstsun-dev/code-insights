@@ -4,6 +4,7 @@ import {
   Lightbulb,
   BarChart3,
   Download,
+  ClipboardList,
   Settings,
   Menu,
   MessageSquare,
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { href: '/patterns', label: 'Patterns', icon: Sparkles, exact: false },
   { href: '/personality', label: 'Personality', icon: UserCircle, exact: false },
   { href: '/export', label: 'Export', icon: Download, exact: false },
+  { href: '/reports', label: 'Reports', icon: ClipboardList, exact: false },
   { href: '/settings', label: 'Settings', icon: Settings, exact: false },
 ];
 
