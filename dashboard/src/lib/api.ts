@@ -552,6 +552,12 @@ export function fetchAnalysisQueue() {
   return request<AnalysisQueueStatus>('/analysis/queue');
 }
 
+// ── Analyzed session IDs ───────────────────────────────────────────────────────
+
+export function fetchAnalyzedSessionIds() {
+  return request<{ sessionIds: string[] }>('/analysis/analyzed-session-ids');
+}
+
 // ── Facets ─────────────────────────────────────────────────────────────────────
 
 export interface FacetRow {

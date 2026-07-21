@@ -231,7 +231,7 @@ function parseFormatA(content: string): ParsedSession | null {
     } : null;
 
     messages.push({
-      id: `codex-assistant-${messages.length}`,
+      id: `${sessionId}:assistant-${messages.length}`,
       sessionId: sessionId,
       type: 'assistant',
       content: text.slice(0, 10000),
@@ -306,7 +306,7 @@ function parseFormatA(content: string): ParsedSession | null {
         const msgText = (payload.message as string) || '';
         if (msgText && !isSystemContextMessage(msgText)) {
           messages.push({
-            id: (payload.id as string) || `codex-user-${messages.length}`,
+            id: `${sessionId}:${(payload.id as string) || `user-${messages.length}`}`,
             sessionId: sessionId,
             type: 'user',
             content: msgText.slice(0, 10000),
@@ -522,7 +522,7 @@ function parseFormatB(content: string): ParsedSession | null {
     if (currentToolCalls.length === 0 && !currentThinking) return;
 
     messages.push({
-      id: `codex-assistant-${messages.length}`,
+      id: `${sessionId}:assistant-${messages.length}`,
       sessionId: sessionId,
       type: 'assistant',
       content: '',
@@ -548,7 +548,7 @@ function parseFormatB(content: string): ParsedSession | null {
       const userContent = extractFormatBContent(item.content);
       if (userContent && !isSystemContextMessage(userContent)) {
         messages.push({
-          id: `codex-user-${messages.length}`,
+          id: `${sessionId}:user-${messages.length}`,
           sessionId: sessionId,
           type: 'user',
           content: userContent.slice(0, 10000),
