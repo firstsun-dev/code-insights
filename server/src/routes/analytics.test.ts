@@ -258,6 +258,35 @@ describe('Analytics routes', () => {
       expect(cursor.cacheReadTokens).toBe(8000);
     });
 
+    it('filters by a comma-separated source list (multi-select)', async () => {
+      insertSessionWithCache(testDb, {
+        id: 's1',
+        startedAt: '2026-07-19T10:00:00.000Z',
+        sourceTool: 'kilo',
+        cacheReadTokens: 1000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's2',
+        startedAt: '2026-07-19T11:00:00.000Z',
+        sourceTool: 'cursor',
+        cacheReadTokens: 2000,
+      });
+      insertSessionWithCache(testDb, {
+        id: 's3',
+        startedAt: '2026-07-19T12:00:00.000Z',
+        sourceTool: 'claude-code',
+        cacheReadTokens: 3000,
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/analytics/cache-by-source?range=all&source=kilo,cursor');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.rows.length).toBe(2);
+      expect(body.rows.map((r: any) => r.sourceTool).sort()).toEqual(['cursor', 'kilo']);
+    });
+
     it('orders by cache_read_tokens DESC', async () => {
       insertSessionWithCache(testDb, {
         id: 's1',
