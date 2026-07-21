@@ -57,11 +57,21 @@ export const MBTITypeSchema = z.enum([
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ]);
 
+export const MBTICandidateSchema = z
+  .object({
+    type: MBTITypeSchema,
+    rank: z.number(),
+    likelihood: z.number(),
+    reasoning: z.string(),
+  })
+  .openapi('MBTICandidate');
+
 export const MBTIProfileSchema = z
   .object({
     type: MBTITypeSchema.nullable(),
     functionStack: z.array(CognitiveFunctionKeySchema).nullable(),
     confidence: z.enum(['low', 'moderate', 'high']).nullable(),
+    topCandidates: z.array(MBTICandidateSchema).optional(),
   })
   .openapi('MBTIProfile');
 

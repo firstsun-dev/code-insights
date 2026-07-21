@@ -87,6 +87,41 @@ export function MbtiCard({ mbti, functions }: MbtiCardProps) {
             );
           })}
         </div>
+
+        {/* topCandidates is LLM-authored (see PERSONALITY_SYSTEM_PROMPT in
+            server/src/llm/reflect-prompts.ts) — a softer, ranked "top 5 guesses with
+            reasoning" companion view over the same function scores, distinct from the
+            single deterministic type above. Only present after Generate has run once;
+            no separate CTA here — the ArchetypeCard's Generate button above populates
+            this too, in the same LLM call. */}
+        {mbti.topCandidates && mbti.topCandidates.length > 0 && (
+          <div className="pt-2 border-t space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">Top 5 likely types (LLM-ranked)</p>
+            {mbti.topCandidates.map(candidate => (
+              <div key={candidate.type} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-4">{candidate.rank}.</span>
+                    <span className="font-mono font-medium">{candidate.type}</span>
+                    {candidate.type === mbti.type && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0">deterministic match</Badge>
+                    )}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{candidate.likelihood}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary/70 transition-all"
+                    style={{ width: `${candidate.likelihood}%` }}
+                  />
+                </div>
+                {candidate.reasoning && (
+                  <p className="text-xs text-muted-foreground leading-snug">{candidate.reasoning}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
