@@ -2,6 +2,30 @@
 // ISO week helpers are duplicated from server/src/routes/shared-aggregation.ts
 // to avoid a server-side import in the dashboard bundle.
 
+import { subDays, startOfDay, formatISO } from 'date-fns';
+
+/**
+ * Resolve a Sessions page date-range filter (preset like '7d'/'30d'/'90d'/'all', or
+ * 'custom' with explicit dateFrom/dateTo) into ISO `from`/`to` bounds suitable for the
+ * GET /api/sessions `from`/`to` query params. Shared between SessionsPage (to build the
+ * server query) and previously duplicated inline in SessionListPanel for client-side
+ * filtering — now server does the filtering, so this is the single source of truth.
+ */
+export function computeDateRangeBounds(
+  dateRange: string,
+  dateFrom: string,
+  dateTo: string
+): { from: string | null; to: string | null } {
+  if (dateRange === 'all' || !dateRange) return { from: null, to: null };
+  if (dateRange === 'custom') {
+    return { from: dateFrom || null, to: dateTo || null };
+  }
+  const days = parseInt(dateRange.replace('d', ''), 10);
+  if (isNaN(days)) return { from: null, to: null };
+  const from = formatISO(startOfDay(subDays(new Date(), days)));
+  return { from, to: null };
+}
+
 // Compute the current ISO week identifier (YYYY-WNN) in UTC.
 export function getCurrentIsoWeek(): string {
   const now = new Date();

@@ -77,3 +77,40 @@ export const PersonalityTrendResponseSchema = z
     rows: z.array(PersonalityTrendRowSchema),
   })
   .openapi('PersonalityTrendResponse');
+
+export const PersonalityProjectsQuerySchema = z.object({
+  period: z.string().optional().openapi({ param: { name: 'period', in: 'query' } }),
+});
+
+export const PersonalityProjectSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .openapi('PersonalityProject');
+
+export const PersonalityProjectsResponseSchema = z
+  .object({
+    projects: z.array(PersonalityProjectSchema),
+  })
+  .openapi('PersonalityProjectsResponse');
+
+export const PersonalityWeeksQuerySchema = z.object({
+  project: z.string().optional().openapi({ param: { name: 'project', in: 'query' } }),
+});
+
+/** Mirrors dashboard/src/lib/api.ts WeekInfo (also used by reflect.ts's /weeks). */
+export const PersonalityWeekInfoSchema = z
+  .object({
+    week: z.string(),
+    sessionCount: z.number(),
+    hasSnapshot: z.boolean(),
+    generatedAt: z.string().nullable(),
+  })
+  .openapi('PersonalityWeekInfo');
+
+export const PersonalityWeeksResponseSchema = z
+  .object({
+    weeks: z.array(PersonalityWeekInfoSchema),
+  })
+  .openapi('PersonalityWeeksResponse');

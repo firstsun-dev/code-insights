@@ -26,7 +26,6 @@ import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown'
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
 import { HomeSelect } from '@/components/filters/HomeSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
-import { subDays, startOfDay, formatISO } from 'date-fns';
 
 const SESSION_CHARACTERS = [
   'deep_focus',
@@ -143,18 +142,9 @@ export function SessionListPanel({
     return map;
   }, [insights]);
 
-  // Compute date range bounds for client-side filtering
-  const dateBounds = useMemo(() => {
-    if (filters.dateRange === 'all' || !filters.dateRange) return null;
-    if (filters.dateRange === 'custom') {
-      return { from: filters.dateFrom || null, to: filters.dateTo || null };
-    }
-    const days = parseInt(filters.dateRange.replace('d', ''), 10);
-    if (isNaN(days)) return null;
-    const from = formatISO(startOfDay(subDays(new Date(), days)));
-    return { from, to: null };
-  }, [filters.dateRange, filters.dateFrom, filters.dateTo]);
-
+  // Date range is now filtered server-side (SessionsPage builds from/to query params via
+  // computeDateRangeBounds and passes them to useSessions) — `sessions` here already
+  // reflects the selected date range, so no client-side date filtering is needed.
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
       if (filters.character !== 'all' && s.session_character !== filters.character) return false;
@@ -165,10 +155,6 @@ export function SessionListPanel({
         const title = getSessionTitle(s).toLowerCase();
         if (!title.includes(q) && !s.project_name.toLowerCase().includes(q)) return false;
       }
-      if (dateBounds) {
-        if (dateBounds.from && s.started_at < dateBounds.from) return false;
-        if (dateBounds.to && s.started_at > dateBounds.to) return false;
-      }
       if (filters.outcome && filters.outcome !== 'all') {
         const sessionOutcome = sessionOutcomes.get(s.id);
         // Unanalyzed sessions always pass the outcome filter
@@ -176,7 +162,7 @@ export function SessionListPanel({
       }
       return true;
     });
-  }, [sessions, filters.character, filters.status, filters.q, analyzedSessionIds, dateBounds, filters.outcome, sessionOutcomes]);
+  }, [sessions, filters.character, filters.status, filters.q, analyzedSessionIds, filters.outcome, sessionOutcomes]);
 
   const groupedSessions = useMemo(() => {
     const groups = new Map<string, Session[]>();
@@ -203,7 +189,7 @@ export function SessionListPanel({
 
   const allFiltersForSave = { ...filters } as Record<string, string>;
   const defaultFilterValues: Record<string, string> = {
-    q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all',
+    q: '', character: 'all', status: 'all', dateRange: '7d', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all',
   };
 
   const dateRangeLabel = useMemo(() => {

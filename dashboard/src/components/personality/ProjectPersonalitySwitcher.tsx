@@ -1,15 +1,18 @@
-import { useProjects } from '@/hooks/useProjects';
+import { usePersonalityProjects } from '@/hooks/usePersonalityProfile';
 
 interface ProjectPersonalitySwitcherProps {
   value: string; // '__all__' or a project id
   onChange: (projectId: string) => void;
+  period: string; // ISO week — scopes the project list to projects with data for this period
 }
 
 /** Dropdown to scope the personality profile to '__all__' (All Projects) or one project.
- * Reuses useProjects() — the same project-listing hook PatternsPage uses — rather than
- * introducing a new endpoint. */
-export function ProjectPersonalitySwitcher({ value, onChange }: ProjectPersonalitySwitcherProps) {
-  const { data: projects = [] } = useProjects();
+ * Uses GET /api/personality/projects, which only returns projects that have at least
+ * one analyzed (facet) session within `period` — selecting any listed project is
+ * guaranteed to have data, unlike the generic project list from useProjects(). */
+export function ProjectPersonalitySwitcher({ value, onChange, period }: ProjectPersonalitySwitcherProps) {
+  const { data } = usePersonalityProjects({ period });
+  const projects = data?.projects ?? [];
 
   if (projects.length <= 1) return null;
 
