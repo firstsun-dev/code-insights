@@ -1,13 +1,20 @@
 // Unit tests for the embedding pipeline.
 // Mocks Ollama HTTP responses; tests batching, store operations, and backfill logic.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 
 // ─── Mock Ollama before importing the client ───────────────────────
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// ─── Mock the DB singleton so backfill integration tests run against an
+// in-memory database instead of the real ~/.code-insights/data.db ──────
+let mockBackfillDb: Database.Database | null = null;
+vi.mock('../../db/client.js', () => ({
+  getDb: () => mockBackfillDb,
+}));
 
 function setupMockOllama(dim: number = 768) {
   mockFetch.mockImplementation(async (url: string, opts: any) => {
@@ -518,19 +525,45 @@ describe('backfill integration', () => {
     setupMockOllama(768);
   });
 
+  afterEach(() => {
+    mockBackfillDb?.close();
+    mockBackfillDb = null;
+  });
+
   it('backfillEmbeddings skips when no pending rows', async () => {
     const { backfillEmbeddings } = await import('../backfill.js');
     const db = freshDb();
+    mockBackfillDb = db;
 
     // Insert schema tables needed by backfill
     db.exec(`
       CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT);
       INSERT INTO schema_version VALUES (1, datetime('now'));
+
+      CREATE TABLE IF NOT EXISTS insights (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        project_name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        bullets TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        source TEXT NOT NULL,
+        metadata TEXT,
+        timestamp TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        analysis_version TEXT NOT NULL,
+        embedding_status TEXT NOT NULL DEFAULT 'pending'
+      );
     `);
+    // No rows inserted — table exists but has zero pending insights.
 
     const stats = await backfillEmbeddings(TEST_CONFIG, 'insight');
     expect(stats.total).toBe(0);
     expect(stats.computed).toBe(0);
-    db.close();
   });
 });
