@@ -119,8 +119,8 @@ export function CacheBySourceCard({ range, homeId, source }: CacheBySourceCardPr
   }
 
   const formattedData: FormattedData[] = chartData.map((row) => {
-    const totalWithCache = (row.cacheRead || 0) + (row.totalInput || 0);
-    const hitRate = totalWithCache > 0 ? (row.cacheRead / totalWithCache) * 100 : 0;
+    const totalWithCache = (row.cacheReadTokens || 0) + (row.totalInputTokens || 0);
+    const hitRate = totalWithCache > 0 ? ((row.cacheReadTokens || 0) / totalWithCache) * 100 : 0;
     return {
       sourceTool: row.sourceTool || 'Unknown',
       cacheCreation: row.cacheCreationTokens || 0,

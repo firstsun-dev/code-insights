@@ -388,7 +388,7 @@ export interface DispatchImagePromptResponse {
 // LLM config from /api/config/llm
 export interface LLMConfig {
   dashboardPort: number;
-  provider?: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'llamacpp' | 'openai-compatible';
+  provider?: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'llamacpp' | 'openai-compatible';
   model?: string;
   apiKey?: string;      // masked by server before returning (first4...last4)
   baseUrl?: string;
