@@ -40,6 +40,7 @@ function makeSession(id: string): Session {
     git_branch: null,
     claude_version: null,
     source_tool: 'claude-code',
+    home_id: null,
     device_id: null,
     device_hostname: null,
     device_platform: null,
@@ -49,6 +50,12 @@ function makeSession(id: string): Session {
     cache_creation_tokens: null,
     cache_read_tokens: null,
     estimated_cost_usd: null,
+    models_used: null,
+    primary_model: null,
+    usage_source: null,
+    compact_count: 0,
+    auto_compact_count: 0,
+    slash_commands: null,
   };
 }
 
@@ -71,15 +78,12 @@ function setup(sessions: Session[], onComplete?: () => void, options?: {
     return analysisStates.get(key);
   });
   
-  const mockStartAnalysis = vi.fn(async (session: Session) => {
+  const mockStartAnalysis = vi.fn(async (): Promise<void> => {
     if (startAnalysisBehavior === 'reject') {
       throw new Error('Analysis failed');
     }
     if (startAnalysisBehavior === 'deferred') {
-      return new Promise(() => {});
-    }
-    if (startAnalysisBehavior === 'immediate-fail') {
-      return Promise.resolve();
+      return new Promise<void>(() => {});
     }
     return Promise.resolve();
   });
@@ -110,7 +114,7 @@ beforeEach(() => {
 describe('BulkAnalyzeButton', () => {
   describe('unconfigured state', () => {
     it('renders disabled button with configure message when LLM not configured', () => {
-      mockUseLlmConfig.mockReturnValue({ data: null } as ReturnType<typeof useLlmConfig>);
+      mockUseLlmConfig.mockReturnValue({ data: null } as unknown as ReturnType<typeof useLlmConfig>);
       setup([makeSession('s1')]);
       const btn = screen.getByRole('button', { name: /analyze selected/i });
       expect(btn).toBeDisabled();
@@ -201,7 +205,7 @@ describe('BulkAnalyzeButton', () => {
     });
 
     it('shows failed count when some sessions error', async () => {
-      const analysisStates = new Map([
+      const analysisStates = new Map<string, AnalysisState>([
         ['s1:session', { status: 'complete', result: { success: true } }],
         ['s2:session', { status: 'error', result: { success: false, error: 'API timeout' } }],
       ]);

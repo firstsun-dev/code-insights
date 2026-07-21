@@ -25,7 +25,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'openai-compatible';
+type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'llamacpp' | 'openai-compatible';
 
 interface ProviderInfo {
   id: LLMProvider;

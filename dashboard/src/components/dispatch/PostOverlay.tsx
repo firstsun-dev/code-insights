@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { PostPreview } from './PostPreview';
 import { CoverImagePromptSection } from './CoverImagePromptSection';
-import type { DispatchResponse } from '@/lib/api';
+import type { DispatchResponse } from '@/lib/types';
 
 interface PostOverlayProps {
   open: boolean;

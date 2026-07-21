@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { generateDispatchImagePrompt } from '@/lib/api';
-import type { DispatchFormat } from '@/lib/api';
+import type { DispatchFormat } from '@/lib/types';
 
 interface CoverImagePromptSectionProps {
   title: string;
