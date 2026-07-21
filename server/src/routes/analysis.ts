@@ -11,6 +11,7 @@ import {
   AnalysisResultSchema,
   AnalysisUsageResponseSchema,
   AnalysisUsageQuerySchema,
+  AnalyzedSessionIdsResponseSchema,
   RecurringInsightResultSchema,
 } from '../schemas/analysis.js';
 import {
@@ -98,6 +99,32 @@ app.openapi(usageRoute, (c) => {
     totalCostUsd: Math.round(totalCostUsd * 1_000_000) / 1_000_000,
     cacheSavingsUsd: Math.round(cacheSavingsUsd * 1_000_000) / 1_000_000,
   }, 200);
+});
+
+// GET /api/analysis/analyzed-session-ids
+// Returns every session_id that has a completed 'session' analysis in analysis_usage.
+// Used by the dashboard to determine which sessions still need analysis — deliberately
+// sourced from analysis_usage (one row per session, PRIMARY KEY (session_id, analysis_type))
+// rather than the insights table, which has no such bound: a single session's analysis
+// produces 5-10+ insight rows, so a capped/paginated insights query silently truncates
+// on large histories and misclassifies already-analyzed sessions as unanalyzed.
+const analyzedSessionIdsRoute = createRoute({
+  method: 'get',
+  path: '/analyzed-session-ids',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: AnalyzedSessionIdsResponseSchema } },
+      description: 'Session IDs with a completed session analysis',
+    },
+  },
+});
+
+app.openapi(analyzedSessionIdsRoute, (c) => {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT session_id FROM analysis_usage WHERE analysis_type = 'session'`
+  ).all() as Array<{ session_id: string }>;
+  return c.json({ sessionIds: rows.map((r) => r.session_id) }, 200);
 });
 
 // POST /api/analysis/session

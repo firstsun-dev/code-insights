@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useDashboardStats, useDailyStats } from '@/hooks/useAnalytics';
 import { useSessions } from '@/hooks/useSessions';
 import { useInsights } from '@/hooks/useInsights';
+import { useAnalyzedSessionIds } from '@/hooks/useAnalyzedSessionIds';
 import { useProjects } from '@/hooks/useProjects';
 import { StatsHero } from '@/components/dashboard/StatsHero';
 import { DashboardActivityChart } from '@/components/dashboard/DashboardActivityChart';
@@ -34,9 +35,10 @@ export default function DashboardPage() {
   const { data: dailyStats = [], isLoading: dailyLoading, isError: dailyError, refetch: refetchDaily } = useDailyStats(range, effectiveHomeId);
   const { data: sessions = [], isLoading: sessionsLoading, isError: sessionsError, refetch: refetchSessions } = useSessions({ limit: 500, ...(homeId !== 'all' && { homeId }) });
   const { data: insights = [], isLoading: insightsLoading } = useInsights();
+  const { data: analyzedSessionIds, isLoading: analyzedIdsLoading } = useAnalyzedSessionIds();
   const { data: projects = [] } = useProjects();
 
-  const loading = statsLoading || sessionsLoading || insightsLoading || dailyLoading;
+  const loading = statsLoading || sessionsLoading || insightsLoading || dailyLoading || analyzedIdsLoading;
   const hasError = statsError || sessionsError || dailyError;
 
   const todayLabel = new Date().toLocaleDateString(undefined, {
@@ -44,9 +46,13 @@ export default function DashboardPage() {
     day: 'numeric',
   });
 
-  // Sessions not yet analyzed
-  const analyzedSessionIds = new Set(insights.map((i) => i.session_id));
-  const unanalyzedSessions = sessions.filter((s) => !analyzedSessionIds.has(s.id));
+  // Sessions not yet analyzed. Sourced from analysis_usage (via useAnalyzedSessionIds),
+  // not the insights list — insights has no safe row cap to rely on at scale (a single
+  // session's analysis produces 5-10+ insight rows), so a capped insights query would
+  // silently misclassify already-analyzed sessions as unanalyzed on large histories.
+  const unanalyzedSessions = analyzedSessionIds
+    ? sessions.filter((s) => !analyzedSessionIds.has(s.id))
+    : [];
 
   // Compute stats for hero — all from dashStats (range-filtered)
   const totalTokens = dashStats

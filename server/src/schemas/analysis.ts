@@ -83,6 +83,12 @@ export const AnalysisUsageQuerySchema = z.object({
 
 export const SessionIdBodyResponseSchema = AnalysisResultSchema;
 
+export const AnalyzedSessionIdsResponseSchema = z
+  .object({
+    sessionIds: z.array(z.string()),
+  })
+  .openapi('AnalyzedSessionIdsResponse');
+
 /** Mirrors server/src/llm/recurring-insights.ts RecurringInsightResult. */
 export const RecurringInsightResultSchema = z
   .object({
