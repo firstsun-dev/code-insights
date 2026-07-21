@@ -137,4 +137,21 @@ export const CHART_COLORS = {
   cost: {
     area: '#f59e0b',   // amber-500
   },
+  // Personality radar chart — one color per trait axis
+  personality: {
+    precision: '#3b82f6',   // blue-500
+    resilience: '#22c55e',  // green-500
+    autonomy: '#a855f7',    // purple-500
+    craft: '#f59e0b',       // amber-500
+    axis: '#06b6d4',        // cyan-500 — Explorer<->Executor gauge
+    pace: '#f43f5e',        // rose-500 — Pace gauge
+  },
 } as const;
+
+/** Human-readable labels for the 4 unipolar personality traits. */
+export const PERSONALITY_TRAIT_LABELS: Record<'precision' | 'resilience' | 'autonomy' | 'craft', string> = {
+  precision: 'Precision',
+  resilience: 'Resilience',
+  autonomy: 'Autonomy',
+  craft: 'Craft',
+};

@@ -12,7 +12,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import ExportPage from '@/pages/ExportPage';
 import JournalPage from '@/pages/JournalPage';
 import PatternsPage from '@/pages/PatternsPage';
-// import PersonalityPage from '@/pages/PersonalityPage';
+import PersonalityPage from '@/pages/PersonalityPage';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -20,6 +20,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/insights': 'Insights',
   '/analytics': 'Analytics',
   '/patterns': 'Patterns',
+  '/personality': 'Personality',
   '/export': 'Export',
   '/journal': 'Journal',
   '/settings': 'Settings',
@@ -74,7 +75,7 @@ export default function App() {
           <Route path="/insights" element={<InsightsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/patterns" element={<PatternsPage />} />
-          {/* <Route path="/personality" element={<PersonalityPage />} /> */}
+          <Route path="/personality" element={<PersonalityPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/export" element={<ExportPage />} />
           <Route path="/journal" element={<JournalPage />} />
