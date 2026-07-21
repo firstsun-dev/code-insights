@@ -106,13 +106,16 @@ export function WeekSelector({ currentWeek, weeks, onWeekChange }: WeekSelectorP
           Arrow navigation works across all weeks; dots are supplementary.
           When the current week is outside the 8-dot window (user is browsing old history),
           include it in the visible slice so the active dot is always shown.
+          `weeks` is sorted most-recent-first, but the left arrow moves to older weeks
+          and the right arrow to newer ones, so the slice is reversed here to render
+          oldest-on-the-left/newest-on-the-right -- matching the arrow directions.
           tabIndex={-1} keeps dots out of the tab order while keeping them mouse-clickable. */}
       {weeks.length > 0 && (
         <div className="flex items-center gap-1">
           {(weeks.slice(0, 8).some(w => w.week === currentWeek)
             ? weeks.slice(0, 8)
             : [...weeks.slice(0, 7), weeks.find(w => w.week === currentWeek)].filter(Boolean) as typeof weeks
-          ).map((w) => {
+          ).slice().reverse().map((w) => {
             const isCurrent = w.week === currentWeek;
             const dotBounds = parseIsoWeekBounds(w.week);
             const label = dotBounds
