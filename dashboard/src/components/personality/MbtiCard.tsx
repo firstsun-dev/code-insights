@@ -7,6 +7,11 @@ import type { MBTIProfile, CognitiveFunctionScore } from '@/lib/types';
 interface MbtiCardProps {
   mbti: MBTIProfile;
   functions: CognitiveFunctionScore[];
+  /** Which method computed `functions` — 'formula' (deterministic, default) or
+   * 'llm-vote' (opt-in, averaged across N independent LLM scoring rounds). Undefined for
+   * snapshots persisted before this field existed; treated as 'formula'. See
+   * PersonalityProfile.cognitiveFunctionScoringMode in cli/src/types.ts. */
+  scoringMode?: 'formula' | 'llm-vote';
 }
 
 const CONFIDENCE_BADGE_VARIANT: Record<'low' | 'moderate' | 'high', 'outline' | 'secondary' | 'default'> = {
@@ -25,7 +30,7 @@ const STACK_ROLE_LABELS = ['Dominant', 'Auxiliary', 'Tertiary', 'Inferior'];
  * Renders gracefully with a "not enough data yet" state when type is null — this is
  * the expected initial state (fewer than 2 non-null function scores), not an error.
  */
-export function MbtiCard({ mbti, functions }: MbtiCardProps) {
+export function MbtiCard({ mbti, functions, scoringMode }: MbtiCardProps) {
   const scoreByKey = new Map(functions.map(f => [f.key, f.score]));
 
   if (mbti.type === null || mbti.functionStack === null) {
@@ -56,7 +61,10 @@ export function MbtiCard({ mbti, functions }: MbtiCardProps) {
               <Fingerprint className="h-4 w-4 text-muted-foreground" />
               Cognitive Type
             </CardTitle>
-            <CardDescription>Derived from your cognitive function scores</CardDescription>
+            <CardDescription>
+              Derived from your cognitive function scores
+              {scoringMode === 'llm-vote' && ' (LLM-voted)'}
+            </CardDescription>
           </div>
           {mbti.confidence && (
             <Badge variant={CONFIDENCE_BADGE_VARIANT[mbti.confidence]} className="text-xs capitalize">
