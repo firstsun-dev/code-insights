@@ -162,6 +162,7 @@ export interface PersonalityProfile {
   axis: PersonalityBipolarAxis;
   pace: PersonalityPace;
   cognitiveFunctions: CognitiveFunctionScore[];
+  cognitiveFunctionScoringMode?: 'formula' | 'llm-vote';
   mbti: MBTIProfile;
   archetype?: PersonalityArchetype;
   computedAt: string;
