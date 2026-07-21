@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { type AnalysisRunner, type RunAnalysisParams, type RunAnalysisResult } from './runner-types.js';
+import { sanitizeForUtf8 } from './unicode.js';
 import { extractJsonPayload } from './response-parsers.js';
 
 /**
@@ -27,7 +28,10 @@ export class AntigravityNativeRunner implements AnalysisRunner {
     
     // Combine system + user prompt. If a formal JSON schema is provided,
     // inject it into the instructions to ensure structural compliance.
-    let fullPrompt = `${params.systemPrompt}\n\nUSER INSTRUCTIONS:\n${params.userPrompt}`;
+    let fullPrompt = sanitizeForUtf8(`${params.systemPrompt}
+
+USER INSTRUCTIONS:
+${params.userPrompt}`);
     if (params.jsonSchema) {
       fullPrompt += `\n\nSTRICT JSON SCHEMA:\n${JSON.stringify(params.jsonSchema, null, 2)}`;
     }
