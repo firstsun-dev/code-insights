@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process';
 import { type AnalysisRunner, type RunAnalysisParams, type RunAnalysisResult } from './runner-types.js';
+import { sanitizeForUtf8 } from './unicode.js';
 import chalk from 'chalk';
 
 export class MistralVibeRunner implements AnalysisRunner {
@@ -23,7 +24,10 @@ export class MistralVibeRunner implements AnalysisRunner {
 
     // Combine system + user prompt. If a formal JSON schema is provided,
     // inject it into the instructions to ensure structural compliance.
-    let fullPrompt = `${params.systemPrompt}\n\nUSER INSTRUCTIONS:\n${params.userPrompt}`;
+    let fullPrompt = sanitizeForUtf8(`${params.systemPrompt}
+
+USER INSTRUCTIONS:
+${params.userPrompt}`);
     if (params.jsonSchema) {
       fullPrompt += `\n\nSTRICT JSON SCHEMA:\n${JSON.stringify(params.jsonSchema, null, 2)}`;
     }

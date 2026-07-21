@@ -7,6 +7,7 @@ import { useSessions } from '@/hooks/useSessions';
 import { useFilterParams } from '@/hooks/useFilterParams';
 import { useProjects } from '@/hooks/useProjects';
 import { useDispatchDiscovery } from '@/hooks/useDispatchDiscovery';
+import { useHomes } from '@/hooks/useHomes';
 import { buildPatternGroups } from '@/lib/pattern-grouping';
 import { buildDispatchPrefill } from '@/lib/buildDispatchPrefill';
 import { InsightListItem } from '@/components/insights/InsightListItem';
@@ -21,14 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Sparkles, SearchX, X, FileText, GitCommit, BookOpen, Target, ChevronDown } from 'lucide-react';
+import { Sparkles, SearchX, X, FileText, GitCommit, BookOpen, Target, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { getDateGroup, sortDateGroups } from '@/lib/utils';
 import { INSIGHT_TYPE_LABELS } from '@/lib/constants/colors';
 import { parseJsonField } from '@/lib/types';
@@ -37,7 +31,8 @@ import { InsightTypePills } from '@/components/filters/InsightTypePills';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
-import { HomeSelect } from '@/components/filters/HomeSelect';
+import { HomeMultiSelect } from '@/components/filters/HomeMultiSelect';
+import { ProjectMultiSelect } from '@/components/filters/ProjectMultiSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
 import { LlmNudgeBanner } from '@/components/LlmNudgeBanner';
 import { DispatchDrawer } from '@/components/dispatch/DispatchDrawer';
@@ -88,6 +83,11 @@ export default function InsightsPage() {
 
   // Group collapse state — groups are expanded by default; keys added here are collapsed.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [searchInput, setSearchInput] = useState(filters.q);
+
+  useEffect(() => {
+    setSearchInput(filters.q);
+  }, [filters.q]);
 
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
@@ -150,13 +150,12 @@ export default function InsightsPage() {
   const [searchParams] = useSearchParams();
   const highlightedInsightId = searchParams.get('insight') || null;
 
-  const { data: projects = [] } = useProjects();
-  const { data: insights = [], isLoading, isError, refetch } = useInsights(
-    filters.project !== 'all' ? { projectId: filters.project } : undefined
-  );
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const { data: homes = [] } = useHomes();
+  const { data: insights = [], isLoading, isError, refetch } = useInsights();
   // Fetch sessions for source tool mapping — Insight type lacks source_tool, so we join client-side.
   // limit: 500 matches Analytics page pattern; server default is 50 which would silently miss sessions.
-  const { data: allSessions = [] } = useSessions({ limit: 500 });
+  const { data: allSessions = [], isLoading: sessionsLoading } = useSessions({ limit: 500 });
 
   // Fetch raw facets to power DispatchEntryButton prefill
   const { data: facetsData } = useQuery({
@@ -247,6 +246,40 @@ export default function InsightsPage() {
   }, [allSessions]);
 
   const patternGroups = useMemo(() => buildPatternGroups(insights), [insights]);
+  const sessionStartedAtMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const session of allSessions) map.set(session.id, session.started_at);
+    return map;
+  }, [allSessions]);
+
+  const selectedHomeIds = useMemo(
+    () => filters.homeId === 'all' ? [] : filters.homeId.split(',').filter(Boolean),
+    [filters.homeId]
+  );
+  const selectedProjectIds = useMemo(
+    () => filters.project === 'all' ? [] : filters.project.split(',').filter(Boolean),
+    [filters.project]
+  );
+
+  const availableProjects = useMemo(() => {
+    if (selectedHomeIds.length === 0) return projects;
+    const projectIds = new Set(
+      allSessions
+        .filter((session) => session.home_id !== null && selectedHomeIds.includes(session.home_id))
+        .map((session) => session.project_id)
+    );
+    return projects.filter((project) => projectIds.has(project.id));
+  }, [allSessions, projects, selectedHomeIds]);
+
+  useEffect(() => {
+    if (projectsLoading || sessionsLoading) return;
+    const availableIds = new Set(availableProjects.map((project) => project.id));
+    const validIds = selectedProjectIds.filter((id) => availableIds.has(id));
+    if (validIds.length !== selectedProjectIds.length) {
+      setFilter('project', validIds.length > 0 ? validIds.join(',') : 'all');
+    }
+  }, [availableProjects, projectsLoading, selectedProjectIds, sessionsLoading, setFilter]);
+
 
   const patternInsightIds = useMemo(() => {
     if (!filters.pattern) return null;
@@ -258,6 +291,7 @@ export default function InsightsPage() {
       if (patternInsightIds && !patternInsightIds.has(i.id)) return false;
       // Multi-type pill support: activeTypes empty = all; non-empty = must match one
       if (activeTypes.length > 0 && !activeTypes.includes(i.type)) return false;
+      if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(i.project_id)) return false;
       if (filters.q) {
         const q = filters.q.toLowerCase();
         if (!i.title.toLowerCase().includes(q) && !i.content.toLowerCase().includes(q)) {
@@ -268,13 +302,13 @@ export default function InsightsPage() {
         const sourceTool = sessionSourceMap.get(i.session_id);
         if (sourceTool !== filters.source) return false;
       }
-      if (filters.homeId !== 'all') {
+      if (selectedHomeIds.length > 0) {
         const sessionHomeId = sessionHomeMap.get(i.session_id);
-        if (sessionHomeId !== filters.homeId) return false;
+        if (!sessionHomeId || !selectedHomeIds.includes(sessionHomeId)) return false;
       }
       return true;
     });
-  }, [insights, activeTypes, filters.q, filters.source, filters.homeId, patternInsightIds, sessionSourceMap, sessionHomeMap]);
+  }, [insights, activeTypes, filters.q, filters.source, patternInsightIds, selectedHomeIds, selectedProjectIds, sessionSourceMap, sessionHomeMap]);
 
   const hasFilters = !!filters.q || filters.type !== 'all' || filters.project !== 'all' || !!filters.pattern || filters.source !== 'all' || filters.homeId !== 'all';
 
@@ -292,7 +326,7 @@ export default function InsightsPage() {
       } else if (view === 'session') {
         key = insight.session_id;
       } else {
-        key = getDateGroup(insight.created_at);
+        key = getDateGroup(sessionStartedAtMap.get(insight.session_id) ?? insight.timestamp);
       }
       const arr = groups.get(key) || [];
       arr.push(insight);
@@ -307,7 +341,10 @@ export default function InsightsPage() {
         key,
         label: key,
         count: items.length,
-        insights: items,
+        insights: items.sort((a, b) =>
+          new Date(sessionStartedAtMap.get(b.session_id) ?? b.timestamp).getTime()
+          - new Date(sessionStartedAtMap.get(a.session_id) ?? a.timestamp).getTime()
+        ),
       }));
     }
 
@@ -332,13 +369,13 @@ export default function InsightsPage() {
 
     // session view
     entries.sort((a, b) => {
-      const aTime = Math.max(...a[1].map((i) => new Date(i.created_at).getTime()));
-      const bTime = Math.max(...b[1].map((i) => new Date(i.created_at).getTime()));
+      const aTime = Math.max(...a[1].map((i) => new Date(sessionStartedAtMap.get(i.session_id) ?? i.timestamp).getTime()));
+      const bTime = Math.max(...b[1].map((i) => new Date(sessionStartedAtMap.get(i.session_id) ?? i.timestamp).getTime()));
       return bTime - aTime;
     });
     return entries.map(([key, items]) => {
       const first = items[0];
-      const sessionDate = format(new Date(first.created_at), 'MMM d, h:mm a');
+      const sessionDate = format(new Date(sessionStartedAtMap.get(first.session_id) ?? first.timestamp), 'MMM d, h:mm a');
       return {
         key,
         label: `${first.project_name} -- ${sessionDate}`,
@@ -346,7 +383,12 @@ export default function InsightsPage() {
         insights: items,
       };
     });
-  }, [filtered, filters.view]);
+  }, [filtered, filters.view, sessionStartedAtMap]);
+
+  const allGroupsCollapsed = grouped.length > 0 && grouped.every((group) => collapsedGroups.has(`${filters.view}:${group.key}`));
+  const toggleAllGroups = useCallback(() => {
+    setCollapsedGroups(allGroupsCollapsed ? new Set() : new Set(grouped.map((group) => `${filters.view}:${group.key}`)));
+  }, [allGroupsCollapsed, filters.view, grouped]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] relative">
@@ -399,24 +441,19 @@ export default function InsightsPage() {
 
           <Input
             placeholder="Search insights..."
-            value={filters.q}
-            onChange={(e) => setFilter('q', e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) setFilter('q', searchInput);
+            }}
             className="max-w-xs"
           />
 
-          <Select value={filters.project} onValueChange={(v) => setFilter('project', v)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All Projects" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectMultiSelect
+            projects={availableProjects}
+            value={selectedProjectIds}
+            onValueChange={(ids) => setFilter('project', ids.length > 0 ? ids.join(',') : 'all')}
+          />
 
           <SourceToolSelect
             value={filters.source}
@@ -424,10 +461,11 @@ export default function InsightsPage() {
             className="w-[140px]"
           />
 
-          <HomeSelect
-            value={filters.homeId}
-            onValueChange={(v) => setFilter('homeId', v)}
-            className="w-[140px]"
+          <HomeMultiSelect
+            homes={homes}
+            value={selectedHomeIds}
+            onValueChange={(ids) => setFilter('homeId', ids.length > 0 ? ids.join(',') : 'all')}
+            className="w-[150px]"
           />
 
           <Tabs
@@ -443,6 +481,11 @@ export default function InsightsPage() {
               ))}
             </TabsList>
           </Tabs>
+
+          <Button variant="outline" size="sm" onClick={toggleAllGroups} disabled={grouped.length === 0}>
+            <ChevronsUpDown className="h-4 w-4 mr-1.5" />
+            {allGroupsCollapsed ? 'Expand all' : 'Collapse all'}
+          </Button>
         </div>
 
         {/* Type pills row */}
@@ -506,10 +549,11 @@ export default function InsightsPage() {
           {grouped.map((group) => {
             const sectionMeta = filters.view === 'type' ? TYPE_SECTION_ICONS[group.key] : null;
             const SectionIcon = sectionMeta?.icon;
-            const isOpen = !collapsedGroups.has(group.key);
+            const collapseKey = `${filters.view}:${group.key}`;
+            const isOpen = !collapsedGroups.has(collapseKey);
 
             return (
-              <Collapsible key={group.key} open={isOpen} onOpenChange={() => toggleGroup(group.key)}>
+              <Collapsible key={collapseKey} open={isOpen} onOpenChange={() => toggleGroup(collapseKey)}>
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
@@ -545,6 +589,7 @@ export default function InsightsPage() {
                           <div className={`transition-[padding-left] ${isSelected ? 'pl-8' : 'group-hover/dispatch:pl-8'}`}>
                             <InsightListItem
                               insight={insight}
+                              timestamp={sessionStartedAtMap.get(insight.session_id)}
                               showProject={filters.view !== 'project'}
                               allInsightIds={allInsightIds}
                               highlighted={insight.id === highlightedInsightId}

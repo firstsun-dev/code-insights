@@ -13,6 +13,7 @@ import { writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { AnalysisRunner, RunAnalysisParams, RunAnalysisResult } from './runner-types.js';
+import { sanitizeForUtf8 } from './unicode.js';
 
 // `claude -p --output-format json` returns a JSON array of typed event objects.
 // We care only about the final result event.
@@ -111,7 +112,7 @@ export class ClaudeNativeRunner implements AnalysisRunner {
     // Write system prompt to a temp file — claude -p reads it via --append-system-prompt-file.
     // Temp file avoids command-line length limits and shell escaping issues.
     const promptFile = join(tmpdir(), `ci-prompt-${fileId}.txt`);
-    writeFileSync(promptFile, params.systemPrompt, 'utf-8');
+    writeFileSync(promptFile, sanitizeForUtf8(params.systemPrompt), 'utf-8');
 
     let schemaFile: string | undefined;
     if (params.jsonSchema) {
@@ -135,7 +136,7 @@ export class ClaudeNativeRunner implements AnalysisRunner {
       let rawOutput: string;
       try {
         rawOutput = execFileSync('claude', args, {
-          input: params.userPrompt,
+          input: sanitizeForUtf8(params.userPrompt),
           encoding: 'utf-8',
           timeout: 300_000,    // 5-minute hard limit per analysis call
           maxBuffer: 30 * 1024 * 1024,  // 30 MB

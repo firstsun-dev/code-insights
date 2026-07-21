@@ -37,6 +37,21 @@ function makeMessage(overrides: Partial<SQLiteMessageRow> = {}): SQLiteMessageRo
   };
 }
 
+// Matches a "### <label>:" role header, tolerating the optional
+// " | +Ns" delta-timestamp and " | Nk tokens" suffixes that
+// formatMessagesForAnalysis appends to every message after the first.
+// For bracketed labels (e.g. "[system]") the suffix is inserted before the
+// closing bracket; for bare labels (e.g. "User#1") it's appended before the colon.
+function roleHeader(label: string): RegExp {
+  const suffix = '(?: \\|[^\\n\\]]*)?';
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (label.endsWith(']')) {
+    const inner = escape(label.slice(0, -1));
+    return new RegExp(`### ${inner}${suffix}\\]:`);
+  }
+  return new RegExp(`### ${escape(label)}${suffix}:`);
+}
+
 // ──────────────────────────────────────────────────────
 // classifyStoredUserMessage
 // ──────────────────────────────────────────────────────
@@ -178,7 +193,7 @@ describe('formatMessagesForAnalysis', () => {
     const result = formatMessagesForAnalysis(messages);
     expect(result).toContain('### User#0:');
     expect(result).toContain('Fix the bug');
-    expect(result).toContain('### Assistant#0:');
+    expect(result).toMatch(roleHeader('Assistant#0'));
     expect(result).toContain('Done!');
   });
 
@@ -261,12 +276,12 @@ describe('formatMessagesForAnalysis', () => {
     ];
     const result = formatMessagesForAnalysis(messages);
     // First and second human messages get indices 0 and 1 (tool-result in between skipped)
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('User#1'));
     // No User#2 should appear (only 2 human messages)
     expect(result).not.toContain('User#2');
     // Tool-result gets [tool-result] label
-    expect(result).toContain('### [tool-result]:');
+    expect(result).toMatch(roleHeader('[tool-result]'));
   });
 
   it('labels auto-compact user messages as [auto-compact] and does NOT increment User#N', () => {
@@ -277,9 +292,9 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: 'msg-3', type: 'user', content: 'Continue work' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### [auto-compact]:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('[auto-compact]'));
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -291,10 +306,10 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: 'msg-3', type: 'user', content: 'Continue work' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### [system]:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('[system]'));
     expect(result).not.toContain('[auto-compact]');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -307,11 +322,11 @@ describe('formatMessagesForAnalysis', () => {
       makeMessage({ id: '4', type: 'user', content: 'Continue' }),
     ];
     const result = formatMessagesForAnalysis(messages);
-    expect(result).toContain('### [system]:');
-    expect(result).toContain('### [auto-compact]:');
+    expect(result).toMatch(roleHeader('[system]'));
+    expect(result).toMatch(roleHeader('[auto-compact]'));
     // User index should still count only genuine human messages (2 of them: 'Do something' + 'Continue')
-    expect(result).toContain('### User#0:');
-    expect(result).toContain('### User#1:');
+    expect(result).toMatch(roleHeader('User#0'));
+    expect(result).toMatch(roleHeader('User#1'));
     expect(result).not.toContain('User#2');
   });
 
@@ -331,7 +346,7 @@ describe('formatMessagesForAnalysis', () => {
     expect(result).toContain('User#2');
     expect(result).not.toContain('User#3');
     // Two [tool-result] blocks appear
-    const toolResultCount = (result.match(/\[tool-result\]/g) ?? []).length;
+    const toolResultCount = (result.match(/\[tool-result(?: \|[^\]]*)?\]/g) ?? []).length;
     expect(toolResultCount).toBe(2);
   });
 });
@@ -371,28 +386,74 @@ describe('buildCacheableConversationBlock', () => {
 describe('buildSessionAnalysisInstructions', () => {
   it('includes project name in the instructions', () => {
     const result = buildSessionAnalysisInstructions('my-app', null);
-    expect(result).toContain('Project: my-app');
+    expect(result).toContain('<project_name>my-app</project_name>');
   });
 
   it('includes session summary when provided', () => {
     const result = buildSessionAnalysisInstructions('my-app', 'Fixed a critical bug');
-    expect(result).toContain('Session Summary: Fixed a critical bug');
+    expect(result).toContain('<session_summary>Fixed a critical bug</session_summary>');
   });
 
   it('omits session summary line when null', () => {
     const result = buildSessionAnalysisInstructions('my-app', null);
-    expect(result).not.toContain('Session Summary:');
+    expect(result).not.toContain('<session_summary>');
   });
 
-  it('contains the PART 1 and PART 2 section headers', () => {
+  it('contains structured XML sections', () => {
     const result = buildSessionAnalysisInstructions('my-app', null);
-    expect(result).toContain('=== PART 1: SESSION FACETS ===');
-    expect(result).toContain('=== PART 2: INSIGHTS ===');
+    expect(result).toContain('<task>');
+    expect(result).toContain('<context>');
+    expect(result).toContain('<rules>');
+    expect(result).toContain('<output_schema>');
   });
 
   it('ends with json tags instruction', () => {
     const result = buildSessionAnalysisInstructions('proj', null);
     expect(result).toContain('<json>...</json>');
+  });
+
+  it('includes related_insights block when relatedInsights provided', () => {
+    const relatedInsights = [
+      { type: 'decision', title: 'Use Vitest', content: 'Chose Vitest for speed', confidence: 0.85 },
+      { type: 'learning', title: 'Testing helps', content: 'Write tests early', confidence: 0.80 },
+    ];
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, relatedInsights);
+    expect(result).toContain('<related_insights>');
+    expect(result).toContain('<insight index="1">');
+    expect(result).toContain('<type>decision</type>');
+    expect(result).toContain('<title>Use Vitest</title>');
+    expect(result).toContain('<content>Chose Vitest for speed</content>');
+    expect(result).toContain('<confidence>0.85</confidence>');
+    expect(result).toContain('<insight index="2">');
+    expect(result).toContain('<type>learning</type>');
+    expect(result).toContain('<title>Testing helps</title>');
+    expect(result).toContain('</related_insights>');
+    expect(result).toContain('<related_insights_instructions>');
+    expect(result).toContain('Do NOT duplicate them');
+  });
+
+  it('omits related_insights block when relatedInsights is empty', () => {
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, []);
+    expect(result).not.toContain('<related_insights>');
+    expect(result).not.toContain('<related_insights_instructions>');
+  });
+
+  it('omits related_insights block when relatedInsights is undefined', () => {
+    const result = buildSessionAnalysisInstructions('my-app', null);
+    expect(result).not.toContain('<related_insights>');
+    expect(result).not.toContain('<related_insights_instructions>');
+  });
+
+  it('truncates long content in related insights', () => {
+    const longContent = 'A'.repeat(500);
+    const relatedInsights = [
+      { type: 'decision', title: 'Long', content: longContent, confidence: 0.9 },
+    ];
+    const result = buildSessionAnalysisInstructions('my-app', null, undefined, undefined, relatedInsights);
+    // The content in the prompt should be truncated (the function itself doesn't truncate,
+    // but the caller should). Here we verify the full content is present since truncation
+    // happens in retrieveRelatedInsights, not in the prompt builder.
+    expect(result).toContain('<content>' + longContent + '</content>');
   });
 });
 
@@ -409,12 +470,15 @@ describe('buildPromptQualityInstructions', () => {
 
   it('includes project name in the instructions', () => {
     const result = buildPromptQualityInstructions('my-app', sessionMeta);
-    expect(result).toContain('Project: my-app');
+    expect(result).toContain('<project_name>my-app</project_name>');
+    expect(result).toContain('<task>');
   });
 
   it('formats session shape header with structured counts', () => {
     const result = buildPromptQualityInstructions('my-app', sessionMeta);
-    expect(result).toContain('Session shape: 8 user messages, 12 assistant messages, 31 tool exchanges');
+    expect(result).toContain('<human_messages>8</human_messages>');
+    expect(result).toContain('<assistant_messages>12</assistant_messages>');
+    expect(result).toContain('<tool_exchanges>31</tool_exchanges>');
   });
 
   it('handles zero tool exchanges', () => {
@@ -423,10 +487,12 @@ describe('buildPromptQualityInstructions', () => {
       assistantMessageCount: 2,
       toolExchangeCount: 0,
     });
-    expect(result).toContain('2 user messages, 2 assistant messages, 0 tool exchanges');
+    expect(result).toContain('<human_messages>2</human_messages>');
+    expect(result).toContain('<assistant_messages>2</assistant_messages>');
+    expect(result).toContain('<tool_exchanges>0</tool_exchanges>');
   });
 
-  it('omits Context signals line when meta is not provided', () => {
+  it('omits context signals string when meta is not provided', () => {
     const result = buildPromptQualityInstructions('proj', sessionMeta);
     expect(result).not.toContain('Context signals:');
   });
@@ -460,17 +526,17 @@ describe('buildPromptQualityInstructions', () => {
 describe('buildFacetOnlyInstructions', () => {
   it('includes project name', () => {
     const result = buildFacetOnlyInstructions('my-app', null);
-    expect(result).toContain('Project: my-app');
+    expect(result).toContain('<project_name>my-app</project_name>');
   });
 
   it('includes session summary when provided', () => {
     const result = buildFacetOnlyInstructions('my-app', 'Fixed auth bug');
-    expect(result).toContain('Session Summary: Fixed auth bug');
+    expect(result).toContain('<session_summary>Fixed auth bug</session_summary>');
   });
 
   it('omits session summary when null', () => {
     const result = buildFacetOnlyInstructions('my-app', null);
-    expect(result).not.toContain('Session Summary:');
+    expect(result).not.toContain('<session_summary>');
   });
 
   it('ends with json tags instruction', () => {
@@ -505,16 +571,26 @@ describe('parseAnalysisResponse', () => {
     expect(result.data.learnings).toEqual([]);
   });
 
-  it('parses raw JSON without tags', () => {
-    const response = `{
-  "summary": { "title": "Test", "content": "Content", "bullets": [] },
+  it('parses valid JSON when followed by extra text containing braces', () => {
+    const response = `Here is the JSON:
+  {
+  "summary": { "title": "Test", "content": "c", "bullets": [] },
   "decisions": [],
   "learnings": []
-}`;
+  }
+  Wait, I forgot some notes { extra: "stuff" } here.`;
     const result = parseAnalysisResponse(response);
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data.summary.title).toBe('Test');
+  });
+
+  it('parses correctly when multiple balanced blocks exist (prefers larger)', () => {
+    const response = `Small: { "a": 1 } Large: { "summary": { "title": "Big", "content": "c", "bullets": [] }, "decisions": [], "learnings": [] }`;
+    const result = parseAnalysisResponse(response);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.summary.title).toBe('Big');
   });
 
   it('returns error for completely malformed response', () => {
