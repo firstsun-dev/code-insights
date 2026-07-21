@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sparkles, Target, Lightbulb, GitBranch, Clock } from 'lucide-react';
 import { Link } from 'react-router';
 import { ErrorCard } from '@/components/ErrorCard';
-import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import { HomeSelect } from '@/components/filters/HomeSelect';
 import type { Insight } from '@/lib/types';
 
@@ -37,6 +37,10 @@ function getWeekLabel(weekKey: string): string {
 
 export default function JournalPage() {
   const [source, setSource] = useState<string>('all');
+  const selectedSourceTools = useMemo(
+    () => source === 'all' ? [] : source.split(',').filter(Boolean),
+    [source]
+  );
   const [homeId, setHomeId] = useState<string>('all');
   const { data: insights = [], isLoading, isError, refetch } = useInsights();
   // limit: 500 matches Analytics page pattern; server default is 50 which would silently miss sessions
@@ -67,9 +71,9 @@ export default function JournalPage() {
   const insightsByWeek = useMemo(() => {
     const relevant = insights.filter((i) => {
       if (i.type !== 'learning' && i.type !== 'decision' && i.type !== 'technique') return false;
-      if (source !== 'all') {
+      if (selectedSourceTools.length > 0) {
         const sourceTool = sessionSourceMap.get(i.session_id);
-        if (sourceTool !== source) return false;
+        if (!sourceTool || !selectedSourceTools.includes(sourceTool)) return false;
       }
       if (homeId !== 'all') {
         const sessionHomeId = sessionHomeMap.get(i.session_id);
@@ -84,7 +88,7 @@ export default function JournalPage() {
       grouped[weekKey].push(insight);
     });
     return grouped;
-  }, [insights, source, sessionSourceMap, homeId, sessionHomeMap]);
+  }, [insights, selectedSourceTools, sessionSourceMap, homeId, sessionHomeMap]);
 
   const sortedWeeks = useMemo(
     () => Object.keys(insightsByWeek).sort((a, b) => b.localeCompare(a)),
@@ -101,9 +105,9 @@ export default function JournalPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SourceToolSelect
-            value={source}
-            onValueChange={setSource}
+          <SourceToolMultiSelect
+            value={selectedSourceTools}
+            onValueChange={(ids) => setSource(ids.length > 0 ? ids.join(',') : 'all')}
             className="w-[140px] h-8 text-xs"
           />
           <HomeSelect
