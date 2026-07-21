@@ -6,7 +6,7 @@ import { normalizeFrictionCategory } from '../llm/friction-normalize.js';
 import { normalizePatternCategory, getPatternCategoryLabel } from '../llm/pattern-normalize.js';
 import { normalizePromptQualityCategory, PQ_CATEGORY_LABELS } from '../llm/prompt-quality-normalize.js';
 import { CANONICAL_PQ_STRENGTH_CATEGORIES } from '../llm/prompt-constants.js';
-import { safeParseJson } from '../utils.js';
+import { safeParseJson, buildInCondition } from '../utils.js';
 
 // ISO week regex: matches YYYY-WNN format (e.g., 2026-W10)
 const ISO_WEEK_RE = /^(\d{4})-W(\d{2})$/;
@@ -98,9 +98,10 @@ export function buildWhereClause(
     conditions.push('s.project_id = ?');
     params.push(project);
   }
-  if (source) {
-    conditions.push('s.source_tool = ?');
-    params.push(source);
+  const sourceCondition = buildInCondition('s.source_tool', source);
+  if (sourceCondition) {
+    conditions.push(sourceCondition.clause);
+    params.push(...sourceCondition.params);
   }
   if (homeId) {
     conditions.push('s.home_id = ?');

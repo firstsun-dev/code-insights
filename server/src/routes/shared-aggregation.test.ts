@@ -153,13 +153,19 @@ describe('buildWhereClause', () => {
 
   it('adds source filter when source is provided', () => {
     const { where, params } = buildWhereClause('all', undefined, 'cursor');
-    expect(where).toBe('WHERE s.deleted_at IS NULL AND s.source_tool = ?');
+    expect(where).toBe('WHERE s.deleted_at IS NULL AND s.source_tool IN (?)');
     expect(params).toEqual(['cursor']);
+  });
+
+  it('adds an IN clause for a comma-separated source list (multi-select)', () => {
+    const { where, params } = buildWhereClause('all', undefined, 'cursor,claude-code');
+    expect(where).toBe('WHERE s.deleted_at IS NULL AND s.source_tool IN (?, ?)');
+    expect(params).toEqual(['cursor', 'claude-code']);
   });
 
   it('combines all filters with AND', () => {
     const { where, params } = buildWhereClause('7d', 'proj-abc', 'claude-code');
-    expect(where).toMatch(/^WHERE s\.deleted_at IS NULL AND s\.started_at >= \? AND s\.project_id = \? AND s\.source_tool = \?$/);
+    expect(where).toMatch(/^WHERE s\.deleted_at IS NULL AND s\.started_at >= \? AND s\.project_id = \? AND s\.source_tool IN \(\?\)$/);
     expect(params).toHaveLength(3);
     expect(params[1]).toBe('proj-abc');
     expect(params[2]).toBe('claude-code');

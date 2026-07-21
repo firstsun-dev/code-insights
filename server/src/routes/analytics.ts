@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
+import { buildInCondition } from '../utils.js';
 import { ErrorSchema } from '../schemas/common.js';
 import {
   RangeQuerySchema,
@@ -241,9 +242,10 @@ app.openapi(cacheBySourceRoute, (c) => {
     conditions.push('home_id = ?');
     params.push(homeId);
   }
-  if (source) {
-    conditions.push('source_tool = ?');
-    params.push(source);
+  const sourceCondition = buildInCondition('source_tool', source);
+  if (sourceCondition) {
+    conditions.push(sourceCondition.clause);
+    params.push(...sourceCondition.params);
   }
   const where = `WHERE ${conditions.join(' AND ')}`;
 

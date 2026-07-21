@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
-import { parseIntParam } from '../utils.js';
+import { parseIntParam, buildInCondition } from '../utils.js';
 import { ErrorSchema, OkSchema } from '../schemas/common.js';
 import {
   SessionSchema,
@@ -68,9 +68,10 @@ app.openapi(listRoute, (c) => {
     conditions.push('project_id = ?');
     params.push(projectId);
   }
-  if (sourceTool) {
-    conditions.push('source_tool = ?');
-    params.push(sourceTool);
+  const sourceToolCondition = buildInCondition('source_tool', sourceTool);
+  if (sourceToolCondition) {
+    conditions.push(sourceToolCondition.clause);
+    params.push(...sourceToolCondition.params);
   }
   if (homeId) {
     conditions.push('home_id = ?');
