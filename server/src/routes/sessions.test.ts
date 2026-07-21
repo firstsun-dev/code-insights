@@ -120,6 +120,20 @@ describe('Sessions routes', () => {
       expect(body.sessions).toHaveLength(1);
       expect(body.sessions[0].id).toBe('sess-cur');
     });
+
+    it('filters by a comma-separated sourceTool list (multi-select)', async () => {
+      seedProject('proj-1', 'alpha');
+      seedSession('sess-cc', 'proj-1', { source_tool: 'claude-code' });
+      seedSession('sess-cur', 'proj-1', { source_tool: 'cursor' });
+      seedSession('sess-codex', 'proj-1', { source_tool: 'codex-cli' });
+
+      const app = createApp();
+      const res = await app.request('/api/sessions?sourceTool=cursor,claude-code');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.sessions).toHaveLength(2);
+      expect(body.sessions.map((s: any) => s.id).sort()).toEqual(['sess-cc', 'sess-cur']);
+    });
   });
 
   describe('GET /api/sessions/:id', () => {

@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { getDb } from '@code-insights/cli/db/client';
 import { extractFacetsOnly, analyzePromptQuality } from '../llm/analysis.js';
 import { buildWhereClause, getAggregatedData } from './shared-aggregation.js';
+import { buildInCondition } from '../utils.js';
 import { ErrorSchema } from '../schemas/common.js';
 import { AggregatedDataSchema } from '../schemas/aggregation.js';
 import {
@@ -142,9 +143,10 @@ app.openapi(missingRoute, (c) => {
     conditions.push('s.project_id = ?');
     params.push(project);
   }
-  if (source) {
-    conditions.push('s.source_tool = ?');
-    params.push(source);
+  const sourceCondition = buildInCondition('s.source_tool', source);
+  if (sourceCondition) {
+    conditions.push(sourceCondition.clause);
+    params.push(...sourceCondition.params);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;

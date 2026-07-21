@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntParam } from './utils.js';
+import { parseIntParam, buildInCondition } from './utils.js';
 
 describe('parseIntParam', () => {
   it('returns parsed integer for a valid string', () => {
@@ -28,5 +28,39 @@ describe('parseIntParam', () => {
 
   it('returns default for Infinity', () => {
     expect(parseIntParam('Infinity', 10)).toBe(10);
+  });
+});
+
+describe('buildInCondition', () => {
+  it('returns null when value is undefined', () => {
+    expect(buildInCondition('source_tool', undefined)).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(buildInCondition('source_tool', '')).toBeNull();
+  });
+
+  it('returns null when value is only commas/whitespace', () => {
+    expect(buildInCondition('source_tool', ' , , ')).toBeNull();
+  });
+
+  it('builds an equality-shaped single-value IN clause (single value behaves like today)', () => {
+    const result = buildInCondition('source_tool', 'cursor');
+    expect(result).toEqual({ clause: 'source_tool IN (?)', params: ['cursor'] });
+  });
+
+  it('splits a comma-separated value into multiple IN params', () => {
+    const result = buildInCondition('source_tool', 'cursor,claude-code');
+    expect(result).toEqual({ clause: 'source_tool IN (?, ?)', params: ['cursor', 'claude-code'] });
+  });
+
+  it('trims whitespace around each value and drops empty entries', () => {
+    const result = buildInCondition('source_tool', ' cursor , claude-code ,, ');
+    expect(result).toEqual({ clause: 'source_tool IN (?, ?)', params: ['cursor', 'claude-code'] });
+  });
+
+  it('uses the provided column name verbatim in the clause', () => {
+    const result = buildInCondition('s.source_tool', 'kilo');
+    expect(result?.clause).toBe('s.source_tool IN (?)');
   });
 });
