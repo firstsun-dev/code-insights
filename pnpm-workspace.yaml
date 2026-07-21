@@ -3,6 +3,14 @@ packages:
   - 'dashboard'
   - 'server'
 
+# Shared across all three packages — bump the version here once instead of
+# editing cli/server/dashboard package.json separately and risking drift.
+catalog:
+  typescript: ^5.9.3
+  vitest: ^4.1.10
+  '@vitest/coverage-v8': ^4.1.10
+  '@types/node': ^22.15.30
+
 # better-sqlite3's postinstall script compiles/downloads its native binding —
 # pnpm blocks all dependency install scripts by default, so without this
 # explicit allowlist a clean `pnpm install` (e.g. in Docker, or any fresh
