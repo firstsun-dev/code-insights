@@ -9,11 +9,11 @@
     "test:coverage": "pnpm --filter @code-insights/cli test:coverage && pnpm --filter @code-insights/server test:coverage"
   },
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=20.19.0",
     "pnpm": ">=8.0.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18",
-    "vitest": "^4.0.18"
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
   }
 }
