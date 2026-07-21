@@ -255,12 +255,12 @@ export function SessionListPanel({
           </Select>
         </div>
 
-        {/* Row 3: Date range + Outcome + Save */}
+        {/* Row 3: Date range + Outcome */}
         <div className="flex gap-2 items-center">
           {/* Date range with custom escape hatch */}
           <Popover open={customDateOpen} onOpenChange={setCustomDateOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1 justify-start px-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 flex-1 min-w-0 justify-start px-2">
                 <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{dateRangeLabel}</span>
               </Button>
@@ -319,7 +319,7 @@ export function SessionListPanel({
             value={filters.outcome || 'all'}
             onValueChange={(v) => onFilterChange('outcome', v)}
           >
-            <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
               <SelectValue placeholder="Outcome" />
             </SelectTrigger>
             <SelectContent>
@@ -330,17 +330,20 @@ export function SessionListPanel({
               ))}
             </SelectContent>
           </Select>
+        </div>
 
+        {/* Row 4: Source + Home + Save */}
+        <div className="flex gap-2 items-center">
           <SourceToolSelect
             value={filters.source || 'all'}
             onValueChange={(v) => onFilterChange('source', v)}
-            className="h-7 text-xs flex-1"
+            className="h-7 text-xs flex-1 min-w-0"
           />
 
           <HomeSelect
             value={filters.homeId || 'all'}
             onValueChange={(v) => onFilterChange('homeId', v)}
-            className="h-7 text-xs flex-1"
+            className="h-7 text-xs flex-1 min-w-0"
           />
 
           <SaveFilterPopover
