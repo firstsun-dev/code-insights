@@ -21,6 +21,7 @@ import { extractPQScore } from '@/lib/score-utils';
 import { SearchX, Terminal, EyeOff, CalendarDays } from 'lucide-react';
 import { useDeletedSessionCount } from '@/hooks/useSessions';
 import { useQueuedSessionIds } from '@/hooks/useAnalysisQueue';
+import { useAnalyzedSessionIds } from '@/hooks/useAnalyzedSessionIds';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
 import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
@@ -100,10 +101,11 @@ export function SessionListPanel({
 
   const { data: deletedCount = 0 } = useDeletedSessionCount(projectId);
   const queuedSessionIds = useQueuedSessionIds();
-  const analyzedSessionIds = useMemo(
-    () => new Set(insights.map((i) => i.session_id)),
-    [insights]
-  );
+  // Sourced from analysis_usage, not `insights` — insights has no safe row cap to
+  // rely on for "is this session analyzed" at scale (a single session's analysis
+  // produces 5-10+ insight rows), so a capped insights query would silently
+  // misclassify already-analyzed sessions as unanalyzed on large histories.
+  const { data: analyzedSessionIds = new Set<string>() } = useAnalyzedSessionIds();
 
   const insightCountsBySession = useMemo(() => {
     const map = new Map<string, Record<string, number>>();
