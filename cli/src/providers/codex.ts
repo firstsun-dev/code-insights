@@ -278,7 +278,14 @@ function parseFormatA(content: string): ParsedSession | null {
         }
 
         if (role === 'assistant') {
-          // response_item assistant message: content has output_text items
+          // response_item assistant message: content has output_text items.
+          // Each such block is a distinct model reply (not a streaming delta) —
+          // if one is already pending, flush it first so multi-turn tasks (several
+          // agent replies before the next user prompt) don't collapse into a single
+          // assistant message and get miscounted as a trivial (<=2 message) session.
+          if (currentAssistantText.trim()) {
+            flushAssistantTurn();
+          }
           const assistantContent = extractContent(payload);
           if (assistantContent) {
             currentAssistantText += assistantContent + '\n';
