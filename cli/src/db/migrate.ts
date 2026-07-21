@@ -10,6 +10,7 @@ export interface MigrationResult {
   v10Applied: boolean;
   v11Applied: boolean;
   v12Applied: boolean;
+  v13Applied: boolean;
 }
 
 /**
@@ -28,6 +29,7 @@ export interface MigrationResult {
  * Version 10: Add parent_session_id and agent_type columns to sessions for subagent hierarchy (Mistral Vibe)
  * Version 11: Add embedding_status to insights and messages, create embedding_metadata table
  * Version 12: Add homes table + sessions.home_id column for multi-home-directory support
+ * Version 13: Add personality_snapshots table for caching rule-scored + LLM-narrated personality profiles
  */
 export function runMigrations(db: Database.Database): MigrationResult {
   // Create schema_version table first if it doesn't exist.
@@ -103,7 +105,13 @@ export function runMigrations(db: Database.Database): MigrationResult {
     v12Applied = true;
   }
 
-  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied, v12Applied };
+  let v13Applied = false;
+  if (currentVersion < 13) {
+    applyV13(db);
+    v13Applied = true;
+  }
+
+  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied, v12Applied, v13Applied };
 }
 
 function getCurrentVersion(db: Database.Database): number {
@@ -304,4 +312,26 @@ function applyV12(db: Database.Database): void {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_home_project ON sessions(home_id, project_id)`);
 
   db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(12);
+}
+
+function applyV13(db: Database.Database): void {
+  // Personality Analysis: dedicated cache table, deliberately NOT shared with reflect_snapshots.
+  // reflect_snapshots's write path does a full-blob overwrite per section-generate call — sharing
+  // it here would risk one feature's generate silently clobbering the other's cached row.
+  // Purely additive (CREATE TABLE IF NOT EXISTS), no backfill needed.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS personality_snapshots (
+      period TEXT NOT NULL,
+      project_id TEXT NOT NULL DEFAULT '__all__',
+      results_json TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      window_start TEXT,
+      window_end TEXT,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      facet_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (period, project_id)
+    );
+  `);
+
+  db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(13);
 }
