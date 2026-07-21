@@ -16,6 +16,8 @@ import {
 } from 'recharts';
 import type { CacheBySourceRow } from '@/lib/types';
 import { useCacheBySource } from '@/hooks/useAnalytics';
+import { SortableTh } from '@/components/ui/sortable-th';
+import { useSort } from '@/lib/hooks/useSort';
 
 type AnalyticsRange = '7d' | '30d' | '90d' | 'all';
 
@@ -75,6 +77,27 @@ export function CacheBySourceCard({ range, homeId, source }: CacheBySourceCardPr
   const { tooltipBg, tooltipBorder } = useThemeColors();
   const { data, isLoading, isError } = useCacheBySource(range, homeId, source);
 
+  const chartData = data?.rows ?? [];
+  const formattedData: FormattedData[] = chartData.map((row) => {
+    const totalWithCache = (row.cacheReadTokens || 0) + (row.totalInputTokens || 0);
+    const hitRate = totalWithCache > 0 ? ((row.cacheReadTokens || 0) / totalWithCache) * 100 : 0;
+    return {
+      sourceTool: row.sourceTool || 'Unknown',
+      cacheCreation: row.cacheCreationTokens || 0,
+      cacheRead: row.cacheReadTokens || 0,
+      sessionCount: row.sessionCount,
+      totalInput: row.totalInputTokens || 0,
+      hitRate,
+    };
+  });
+
+  type CacheSortKey = 'sourceTool' | 'sessionCount' | 'totalInput' | 'cacheCreation' | 'cacheRead' | 'hitRate';
+  const { sorted: sortedData, sortKey, sortDirection, toggleSort } = useSort<FormattedData, CacheSortKey>(
+    formattedData,
+    (row, key) => row[key],
+    { key: 'sourceTool', direction: 'asc' }
+  );
+
   if (isLoading) {
     return (
       <Card>
@@ -101,8 +124,6 @@ export function CacheBySourceCard({ range, homeId, source }: CacheBySourceCardPr
     );
   }
 
-  const chartData = data?.rows ?? [];
-
   if (chartData.length === 0) {
     return (
       <Card>
@@ -117,19 +138,6 @@ export function CacheBySourceCard({ range, homeId, source }: CacheBySourceCardPr
       </Card>
     );
   }
-
-  const formattedData: FormattedData[] = chartData.map((row) => {
-    const totalWithCache = (row.cacheReadTokens || 0) + (row.totalInputTokens || 0);
-    const hitRate = totalWithCache > 0 ? ((row.cacheReadTokens || 0) / totalWithCache) * 100 : 0;
-    return {
-      sourceTool: row.sourceTool || 'Unknown',
-      cacheCreation: row.cacheCreationTokens || 0,
-      cacheRead: row.cacheReadTokens || 0,
-      sessionCount: row.sessionCount,
-      totalInput: row.totalInputTokens || 0,
-      hitRate,
-    };
-  });
 
   return (
     <Card>
@@ -176,16 +184,51 @@ export function CacheBySourceCard({ range, homeId, source }: CacheBySourceCardPr
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="py-2 text-left font-medium">Provider</th>
-                <th className="py-2 text-right font-medium">Sessions</th>
-                <th className="py-2 text-right font-medium">Total Input</th>
-                <th className="py-2 text-right font-medium">Cache Creation</th>
-                <th className="py-2 text-right font-medium">Cache Read</th>
-                <th className="py-2 text-right font-medium">Hit Rate</th>
+                <SortableTh
+                  label="Provider"
+                  active={sortKey === 'sourceTool'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('sourceTool')}
+                />
+                <SortableTh
+                  label="Sessions"
+                  align="right"
+                  active={sortKey === 'sessionCount'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('sessionCount')}
+                />
+                <SortableTh
+                  label="Total Input"
+                  align="right"
+                  active={sortKey === 'totalInput'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('totalInput')}
+                />
+                <SortableTh
+                  label="Cache Creation"
+                  align="right"
+                  active={sortKey === 'cacheCreation'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('cacheCreation')}
+                />
+                <SortableTh
+                  label="Cache Read"
+                  align="right"
+                  active={sortKey === 'cacheRead'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('cacheRead')}
+                />
+                <SortableTh
+                  label="Hit Rate"
+                  align="right"
+                  active={sortKey === 'hitRate'}
+                  direction={sortDirection}
+                  onClick={() => toggleSort('hitRate')}
+                />
               </tr>
             </thead>
             <tbody>
-              {formattedData.map((row) => (
+              {sortedData.map((row) => (
                 <tr key={row.sourceTool} className="border-b last:border-0">
                   <td className="py-2 font-medium">{row.sourceTool}</td>
                   <td className="py-2 text-right">{row.sessionCount}</td>
