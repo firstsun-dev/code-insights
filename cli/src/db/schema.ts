@@ -152,6 +152,6 @@ CREATE TABLE IF NOT EXISTS usage_stats (
 
 // Version 13: Add personality_snapshots table (Personality Analysis feature cache).
 // See db/migrate.ts applyV13() for the full migration and per-version history.
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 export { runMigrations } from './migrate.js';
