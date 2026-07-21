@@ -6,6 +6,7 @@ import { loadSyncState, saveSyncState } from '../utils/config.js';
 import { autoDetectOllama } from '../utils/ollama-detect.js';
 import { trackEvent, identifyUser, captureError, classifyError } from '../utils/telemetry.js';
 import { insertSessionWithProjectAndReturnIsNew, insertMessages, recalculateUsageStats } from '../db/write.js';
+import { markSessionAnalysisStale } from '../analysis/analysis-usage-db.js';
 import { getDb, getMigrationResult } from '../db/client.js';
 import { listHomes, type Home } from '../db/homes.js';
 import { getAllProviders, getProvider } from '../providers/registry.js';
@@ -226,6 +227,12 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
           // Write session and messages to SQLite
           const isNew = insertSessionWithProjectAndReturnIsNew(session, !!options.force, home.id);
           insertMessages(session, !!options.force);
+
+          // Re-parsing an existing session means its source file changed since
+          // last sync — any prior analysis no longer reflects current content.
+          if (!isNew) {
+            markSessionAnalysisStale(session.id);
+          }
 
           // Update and persist sync state after each file
           // so progress survives crashes

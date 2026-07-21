@@ -11,6 +11,7 @@ export interface MigrationResult {
   v11Applied: boolean;
   v12Applied: boolean;
   v13Applied: boolean;
+  v14Applied: boolean;
 }
 
 /**
@@ -30,6 +31,7 @@ export interface MigrationResult {
  * Version 11: Add embedding_status to insights and messages, create embedding_metadata table
  * Version 12: Add homes table + sessions.home_id column for multi-home-directory support
  * Version 13: Add personality_snapshots table for caching rule-scored + LLM-narrated personality profiles
+ * Version 14: Add analysis_status to analysis_usage for stale-on-resync tracking
  */
 export function runMigrations(db: Database.Database): MigrationResult {
   // Create schema_version table first if it doesn't exist.
@@ -111,7 +113,13 @@ export function runMigrations(db: Database.Database): MigrationResult {
     v13Applied = true;
   }
 
-  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied, v12Applied, v13Applied };
+  let v14Applied = false;
+  if (currentVersion < 14) {
+    applyV14(db);
+    v14Applied = true;
+  }
+
+  return { v6Applied, v7Applied, v8Applied, v9Applied, v10Applied, v11Applied, v12Applied, v13Applied, v14Applied };
 }
 
 function getCurrentVersion(db: Database.Database): number {
@@ -334,4 +342,16 @@ function applyV13(db: Database.Database): void {
   `);
 
   db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(13);
+}
+
+function applyV14(db: Database.Database): void {
+  // Tracks whether an (session_id, analysis_type) analysis result is still valid.
+  // sync marks a session's rows 'stale' when it re-parses a changed source file;
+  // saveAnalysisUsage marks them back to 'fresh' when analysis actually re-runs.
+  db.exec(`
+    ALTER TABLE analysis_usage ADD COLUMN analysis_status TEXT NOT NULL DEFAULT 'fresh'
+      CHECK(analysis_status IN ('fresh', 'stale'));
+  `);
+
+  db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(14);
 }
