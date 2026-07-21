@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '@code-insights/cli/db/client';
 import { jsonrepair } from 'jsonrepair';
-import type { PersonalityProfile } from '@code-insights/cli/types';
+import type { PersonalityProfile, CognitiveFunctionKey, MBTIType } from '@code-insights/cli/types';
 import { createLLMClient } from '../llm/client.js';
 import { requireLLM } from './route-helpers.js';
 import { extractJsonPayload } from '../llm/response-parsers.js';
@@ -33,6 +33,13 @@ const app = new OpenAPIHono({
 
 const DEFAULT_TREND_WEEKS = 12;
 const MAX_TREND_WEEKS = 52;
+
+const VALID_MBTI_TYPES = new Set<string>([
+  'INTJ', 'INTP', 'ENTJ', 'ENTP',
+  'INFJ', 'INFP', 'ENFJ', 'ENFP',
+  'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+  'ISTP', 'ISFP', 'ESTP', 'ESFP',
+]);
 
 interface FrictionPointRow { category: string; description: string; severity: string; resolution: string; attribution?: string }
 interface EffectivePatternRow { category: string; description: string; confidence: number; driver?: string }
@@ -412,6 +419,10 @@ app.post('/generate', requireLLM(), async (c) => {
       const traitScore = (key: 'precision' | 'resilience' | 'autonomy' | 'craft') =>
         profile.traits.find(t => t.key === key)?.score ?? null;
 
+      const cognitiveFunctionScores = Object.fromEntries(
+        profile.cognitiveFunctions.map(f => [f.key, f.score])
+      ) as Record<CognitiveFunctionKey, number | null>;
+
       const prompt = generatePersonalityPrompt({
         precision: traitScore('precision'),
         resilience: traitScore('resilience'),
@@ -419,6 +430,9 @@ app.post('/generate', requireLLM(), async (c) => {
         craft: traitScore('craft'),
         explorerExecutorAxis: profile.axis.value,
         pace: profile.pace.value,
+        cognitiveFunctions: cognitiveFunctionScores,
+        deterministicMbtiType: profile.mbti.type,
+        deterministicFunctionStack: profile.mbti.functionStack,
       });
 
       const response = await client.chat([
@@ -455,6 +469,38 @@ app.post('/generate', requireLLM(), async (c) => {
         : [];
 
       profile.archetype = { tagline, tagline_subtitle, narrative, strengths, growthAreas };
+
+      // topCandidates sanitization — same "never trust the LLM" posture as above, but with
+      // one extra step: `rank` is always reassigned from array position, never read from the
+      // response, so a duplicated/out-of-order rank field from the LLM can't corrupt the list.
+      // `likelihood` is the one deliberately LLM-authored number in this whole feature (see
+      // the header comment on PERSONALITY_SYSTEM_PROMPT in reflect-prompts.ts) — still clamped
+      // to [0, 100] and rounded, never trusted as-is.
+      const rawCandidates = Array.isArray(parsed?.['topCandidates']) ? parsed['topCandidates'] as unknown[] : [];
+      const seenTypes = new Set<string>();
+      const topCandidates = rawCandidates
+        .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
+        .filter(c => typeof c['type'] === 'string' && VALID_MBTI_TYPES.has(c['type'] as string))
+        .filter(c => {
+          const type = c['type'] as string;
+          if (seenTypes.has(type)) return false;
+          seenTypes.add(type);
+          return true;
+        })
+        .slice(0, 5)
+        .map((c, i) => {
+          const rawLikelihood = typeof c['likelihood'] === 'number' && Number.isFinite(c['likelihood']) ? c['likelihood'] : 0;
+          return {
+            type: c['type'] as MBTIType,
+            rank: i + 1,
+            likelihood: Math.round(Math.max(0, Math.min(100, rawLikelihood))),
+            reasoning: typeof c['reasoning'] === 'string' ? (c['reasoning'] as string).slice(0, 300) : '',
+          };
+        });
+
+      if (topCandidates.length > 0) {
+        profile.mbti = { ...profile.mbti, topCandidates };
+      }
 
       if (!c.req.raw.signal.aborted) {
         const isoWeekBounds = parseIsoWeek(period);
