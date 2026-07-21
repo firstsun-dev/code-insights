@@ -15,6 +15,10 @@ import {
   PersonalityTrendQuerySchema,
   PersonalityProfileSchema,
   PersonalityTrendResponseSchema,
+  PersonalityProjectsQuerySchema,
+  PersonalityProjectsResponseSchema,
+  PersonalityWeeksQuerySchema,
+  PersonalityWeeksResponseSchema,
 } from '../schemas/personality.js';
 
 const app = new OpenAPIHono({
@@ -209,6 +213,155 @@ app.openapi(trendRoute, (c) => {
     .reverse(); // chronological order (oldest first) for trend charting
 
   return c.json({ rows: result }, 200);
+});
+
+// GET /api/personality/projects
+// Query: period (ISO week, defaults to current week).
+// Returns only projects that have at least one session_facets row for a session
+// within the period's date window — used by ProjectPersonalitySwitcher so the
+// dropdown never lists a project that would immediately 404/empty on selection.
+// '__all__' is not included here; the dashboard always renders it as a static
+// first option regardless of this list.
+const projectsRoute = createRoute({
+  method: 'get',
+  path: '/projects',
+  request: { query: PersonalityProjectsQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: PersonalityProjectsResponseSchema } },
+      description: 'Projects with at least one analyzed (facet) session for the given period',
+    },
+  },
+});
+
+app.openapi(projectsRoute, (c) => {
+  const db = getDb();
+  const period = resolvePeriod(c.req.query('period'));
+  const { where, params } = buildWhereClause(period, undefined, undefined);
+
+  const projects = db.prepare(`
+    SELECT DISTINCT p.id, p.name
+    FROM projects p
+    JOIN sessions s ON s.project_id = p.id
+    JOIN session_facets sf ON sf.session_id = s.id
+    ${where}
+    ORDER BY p.name ASC
+  `).all(...params) as Array<{ id: string; name: string }>;
+
+  return c.json({ projects }, 200);
+});
+
+// GET /api/personality/weeks
+// Returns all ISO weeks from the earliest facet-analyzed session through the current
+// week, with personality snapshot status. Mirrors reflect.ts's GET /weeks structure,
+// but "has data" means session_facets rows (generation requires facets, not just any
+// session) and "has snapshot" checks personality_snapshots, not reflect_snapshots.
+const weeksRoute = createRoute({
+  method: 'get',
+  path: '/weeks',
+  request: { query: PersonalityWeeksQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: PersonalityWeeksResponseSchema } },
+      description: 'ISO weeks from the earliest facet-analyzed session through the current week',
+    },
+  },
+});
+
+app.openapi(weeksRoute, (c) => {
+  const db = getDb();
+  const project = c.req.query('project');
+
+  const projectCondition = project ? 'AND s.project_id = ?' : '';
+  const projectParams: string[] = project ? [project] : [];
+
+  // Find the earliest facet-analyzed session to determine the full week range.
+  const earliestRow = db.prepare(`
+    SELECT MIN(s.started_at) as earliest
+    FROM sessions s
+    JOIN session_facets sf ON sf.session_id = s.id
+    WHERE s.deleted_at IS NULL
+      ${projectCondition}
+  `).get(...projectParams) as { earliest: string | null } | undefined;
+
+  if (!earliestRow?.earliest) {
+    return c.json({ weeks: [] }, 200);
+  }
+
+  // Compute the UTC midnight of the Monday of the current ISO week.
+  const now = new Date();
+  const nowDay = now.getUTCDay(); // 0=Sun
+  const daysToMonday = nowDay === 0 ? 6 : nowDay - 1;
+  const thisMondayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - daysToMonday * 86400000;
+
+  // Compute the UTC midnight of the Monday of the earliest facet-analyzed session's ISO week.
+  const earliestDate = new Date(earliestRow.earliest);
+  const earliestDay = earliestDate.getUTCDay();
+  const daysToEarliestMonday = earliestDay === 0 ? 6 : earliestDay - 1;
+  const earliestMondayMs = Date.UTC(earliestDate.getUTCFullYear(), earliestDate.getUTCMonth(), earliestDate.getUTCDate()) - daysToEarliestMonday * 86400000;
+
+  // Generate all weeks from earliest through current (most recent first).
+  // Cap at 520 weeks (~10 years), same rationale as reflect.ts's /weeks.
+  const MAX_WEEKS = 520;
+  type WeekEntry = { week: string; start: string; end: string };
+  const weekEntries: WeekEntry[] = [];
+  let weekMondayMs = thisMondayMs;
+  while (weekMondayMs >= earliestMondayMs && weekEntries.length < MAX_WEEKS) {
+    const weekMonday = new Date(weekMondayMs);
+    const week = formatIsoWeek(weekMonday);
+    const bounds = parseIsoWeek(week)!;
+    weekEntries.push({ week, start: bounds.start.toISOString(), end: bounds.end.toISOString() });
+    weekMondayMs -= 7 * 86400000;
+  }
+
+  const projectKey = project || '__all__';
+
+  // Query 1: facet-analyzed session counts per ISO week using GROUP BY.
+  const rangeStart = weekEntries[weekEntries.length - 1].start;
+  const rangeEnd = weekEntries[0].end;
+
+  const sessionCountRaw = db.prepare(`
+    SELECT
+      date(s.started_at, 'weekday 4', '-3 days') as week_monday,
+      COUNT(*) as cnt
+    FROM sessions s
+    JOIN session_facets sf ON sf.session_id = s.id
+    WHERE s.deleted_at IS NULL
+      AND s.started_at >= ?
+      AND s.started_at < ?
+      ${projectCondition}
+    GROUP BY week_monday
+  `).all(
+    rangeStart,
+    rangeEnd,
+    ...projectParams
+  ) as Array<{ week_monday: string; cnt: number }>;
+
+  const sessionCountMap = new Map<string, number>();
+  for (const row of sessionCountRaw) {
+    const monday = new Date(row.week_monday + 'T00:00:00Z');
+    const weekStr = formatIsoWeek(monday);
+    sessionCountMap.set(weekStr, (sessionCountMap.get(weekStr) ?? 0) + row.cnt);
+  }
+
+  // Query 2: all personality snapshots for these weeks in one query
+  const weekPlaceholders = weekEntries.map(() => '?').join(', ');
+  const snapshotRows = db.prepare(`
+    SELECT period, generated_at
+    FROM personality_snapshots
+    WHERE period IN (${weekPlaceholders}) AND project_id = ?
+  `).all(...weekEntries.map(e => e.week), projectKey) as Array<{ period: string; generated_at: string }>;
+
+  const snapshotMap = new Map(snapshotRows.map(r => [r.period, r.generated_at]));
+
+  const weeks = weekEntries.map((entry) => ({
+    week: entry.week,
+    sessionCount: sessionCountMap.get(entry.week) ?? 0,
+    hasSnapshot: snapshotMap.has(entry.week),
+    generatedAt: snapshotMap.get(entry.week) ?? null,
+  }));
+
+  return c.json({ weeks }, 200);
 });
 
 // POST /api/personality/generate
