@@ -35,13 +35,15 @@ const EXPAND_BORDER_COLORS: Record<InsightType, string> = {
 
 interface InsightListItemProps {
   insight: Insight;
+  /** The session time is used on the Insights timeline; fall back to insight time elsewhere. */
+  timestamp?: string;
   showProject?: boolean;
   allInsightIds?: Set<string>;
   highlighted?: boolean;
   defaultExpanded?: boolean;
 }
 
-export function InsightListItem({ insight, showProject = false, allInsightIds, highlighted = false, defaultExpanded = false }: InsightListItemProps) {
+export function InsightListItem({ insight, timestamp, showProject = false, allInsightIds, highlighted = false, defaultExpanded = false }: InsightListItemProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showRing, setShowRing] = useState(highlighted);
   const itemRef = useRef<HTMLDivElement>(null);
@@ -123,7 +125,7 @@ export function InsightListItem({ insight, showProject = false, allInsightIds, h
                 <span className="text-xs text-muted-foreground">{insight.project_name}</span>
               )}
               <span className="text-xs text-muted-foreground ml-auto">
-                {formatDistanceToNow(new Date(insight.timestamp), { addSuffix: true })}
+                {formatDistanceToNow(new Date(timestamp ?? insight.timestamp), { addSuffix: true })}
               </span>
             </div>
           </div>

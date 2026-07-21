@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "active_work_id": "custom-provider-base-url-ebc7c6b2",
+  "works": {
+    "custom-provider-base-url-ebc7c6b2": {
+      "work_id": "custom-provider-base-url-ebc7c6b2",
+      "active_plan": "/home/tianyao/code-insights/.omo/plans/custom-provider-base-url.md",
+      "plan_name": "custom-provider-base-url",
+      "status": "active",
+      "started_at": "2026-07-20T02:20:47.344Z",
+      "updated_at": "2026-07-20T02:20:47.344Z",
+      "session_ids": [
+        "opencode:ses_082afce04ffegAdmxVdH1A8aya"
+      ],
+      "session_origins": {
+        "opencode:ses_082afce04ffegAdmxVdH1A8aya": "direct"
+      },
+      "agent": "sisyphus",
+      "task_sessions": {}
+    }
+  },
+  "active_plan": "/home/tianyao/code-insights/.omo/plans/custom-provider-base-url.md",
+  "started_at": "2026-07-20T02:20:47.344Z",
+  "status": "active",
+  "updated_at": "2026-07-20T02:20:47.344Z",
+  "session_ids": [
+    "opencode:ses_082afce04ffegAdmxVdH1A8aya"
+  ],
+  "session_origins": {
+    "opencode:ses_082afce04ffegAdmxVdH1A8aya": "direct"
+  },
+  "plan_name": "custom-provider-base-url",
+  "task_sessions": {},
+  "agent": "sisyphus"
+}
