@@ -136,6 +136,19 @@ describe('ProviderRunner.runAnalysis() — OpenAI', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('replaces malformed surrogate code units before serializing the request', async () => {
+    mockFetch.mockResolvedValueOnce(makeFetchResponse({ choices: [{ message: { content: '{}' } }] }));
+    const runner = makeRunner(makeConfig(), 'sk-test');
+
+    await runner.runAnalysis({ systemPrompt: 'sys\uD83E', userPrompt: 'user\uDC00' });
+
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.messages).toEqual([
+      { role: 'system', content: 'sys\uFFFD' },
+      { role: 'user', content: 'user\uFFFD' },
+    ]);
+  });
+
   it('throws on non-2xx response', async () => {
     mockFetch.mockResolvedValueOnce(makeFetchResponse(
       { error: { message: 'Invalid API key.' } },
