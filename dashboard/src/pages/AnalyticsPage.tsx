@@ -11,7 +11,7 @@ import { ErrorCard } from '@/components/ErrorCard';
 import { formatTokenCount, formatModelName } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CHART_COLORS } from '@/lib/constants/colors';
-import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import { HomeSelect } from '@/components/filters/HomeSelect';
 import {
   BarChart,
@@ -37,6 +37,10 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>('7d');
   const [source, setSource] = useState<string>('all');
   const [homeId, setHomeId] = useState<string>('all');
+  const selectedSourceTools = useMemo(
+    () => source === 'all' ? [] : source.split(',').filter(Boolean),
+    [source]
+  );
   const { data: sessions = [], isLoading: sessionsLoading, isError: sessionsError, refetch: refetchSessions } = useSessions({
     limit: 500,
     ...(source !== 'all' && { sourceTool: source }),
@@ -268,9 +272,9 @@ export default function AnalyticsPage() {
               </Button>
             ))}
           </div>
-          <SourceToolSelect
-            value={source}
-            onValueChange={setSource}
+          <SourceToolMultiSelect
+            value={selectedSourceTools}
+            onValueChange={(ids) => setSource(ids.length > 0 ? ids.join(',') : 'all')}
             className="w-[140px] h-7 text-xs"
           />
           <HomeSelect
