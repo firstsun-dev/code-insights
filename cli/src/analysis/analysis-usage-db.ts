@@ -19,6 +19,7 @@ export interface AnalysisUsageRow {
   duration_ms: number | null;
   chunk_count: number;
   analyzed_at: string;            // ISO 8601 (from SQLite datetime('now'))
+  analysis_status: 'fresh' | 'stale';
 }
 
 /** Data required to record a completed analysis call. */
@@ -58,8 +59,8 @@ export function saveAnalysisUsage(data: SaveAnalysisUsageData): void {
     INSERT INTO analysis_usage
       (session_id, analysis_type, provider, model,
        input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-       estimated_cost_usd, duration_ms, chunk_count, session_message_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       estimated_cost_usd, duration_ms, chunk_count, session_message_count, analysis_status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fresh')
     ON CONFLICT(session_id, analysis_type) DO UPDATE SET
       provider = excluded.provider,
       model = excluded.model,
@@ -72,7 +73,9 @@ export function saveAnalysisUsage(data: SaveAnalysisUsageData): void {
       chunk_count = excluded.chunk_count,
       -- Preserve existing value when caller doesn't provide session_message_count (server re-analysis).
       -- Without COALESCE, a NULL from excluded would overwrite a CLI-written value, breaking resume detection.
-      session_message_count = COALESCE(excluded.session_message_count, analysis_usage.session_message_count)
+      session_message_count = COALESCE(excluded.session_message_count, analysis_usage.session_message_count),
+      -- A completed analysis call is always fresh, even if it was re-run while marked stale.
+      analysis_status = 'fresh'
   `).run(
     data.session_id,
     data.analysis_type,
@@ -98,9 +101,22 @@ export function getSessionAnalysisUsage(sessionId: string): AnalysisUsageRow[] {
   return db.prepare(`
     SELECT session_id, analysis_type, provider, model,
            input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-           estimated_cost_usd, duration_ms, chunk_count, analyzed_at
+           estimated_cost_usd, duration_ms, chunk_count, analyzed_at, analysis_status
     FROM analysis_usage
     WHERE session_id = ?
     ORDER BY analyzed_at ASC
   `).all(sessionId) as AnalysisUsageRow[];
+}
+
+/**
+ * Mark all recorded analyses for a session as stale.
+ * Called by sync when a previously-synced session's source file is re-parsed
+ * after its mtime changed, since any earlier analysis no longer reflects
+ * the current content. A no-op if the session was never analyzed.
+ */
+export function markSessionAnalysisStale(sessionId: string): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE analysis_usage SET analysis_status = 'stale' WHERE session_id = ?
+  `).run(sessionId);
 }

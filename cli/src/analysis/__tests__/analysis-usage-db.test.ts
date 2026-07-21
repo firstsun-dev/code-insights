@@ -4,7 +4,7 @@
  * AnalysisUsageRow interface, and the SQL logic for saveAnalysisUsage + getSessionAnalysisUsage.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import type { SaveAnalysisUsageData, AnalysisUsageRow } from '../analysis-usage-db.js';
 
@@ -27,6 +27,7 @@ function createTestDb() {
       chunk_count INTEGER NOT NULL DEFAULT 1,
       session_message_count INTEGER,
       analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      analysis_status TEXT NOT NULL DEFAULT 'fresh' CHECK(analysis_status IN ('fresh', 'stale')),
       PRIMARY KEY (session_id, analysis_type)
     );
   `);
@@ -222,5 +223,85 @@ describe('getSessionAnalysisUsage SQL logic', () => {
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r.analysis_type)).toContain('session');
     expect(rows.map(r => r.analysis_type)).toContain('prompt_quality');
+  });
+});
+
+// ── analysis_status (V14: stale-on-resync tracking) ──────────────────────────
+
+describe('analysis_status', () => {
+  async function setupWithDb() {
+    const db = createTestDb();
+    vi.resetModules();
+    vi.doMock('../../db/client.js', () => ({ getDb: () => db }));
+    const mod = await import('../analysis-usage-db.js');
+    return { db, ...mod };
+  }
+
+  it('saveAnalysisUsage writes a new row as fresh', async () => {
+    const { saveAnalysisUsage, getSessionAnalysisUsage } = await setupWithDb();
+    saveAnalysisUsage({
+      session_id: 'sess-1',
+      analysis_type: 'session',
+      provider: 'anthropic',
+      model: 'claude-opus-4-6',
+      input_tokens: 100,
+      output_tokens: 50,
+      estimated_cost_usd: 0.01,
+    });
+    const rows = getSessionAnalysisUsage('sess-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].analysis_status).toBe('fresh');
+  });
+
+  it('markSessionAnalysisStale flips an existing row to stale', async () => {
+    const { saveAnalysisUsage, getSessionAnalysisUsage, markSessionAnalysisStale } = await setupWithDb();
+    saveAnalysisUsage({
+      session_id: 'sess-1',
+      analysis_type: 'session',
+      provider: 'anthropic',
+      model: 'claude-opus-4-6',
+      input_tokens: 100,
+      output_tokens: 50,
+      estimated_cost_usd: 0.01,
+    });
+
+    markSessionAnalysisStale('sess-1');
+
+    const rows = getSessionAnalysisUsage('sess-1');
+    expect(rows[0].analysis_status).toBe('stale');
+  });
+
+  it('markSessionAnalysisStale is a no-op for a session with no recorded analysis', async () => {
+    const { getSessionAnalysisUsage, markSessionAnalysisStale } = await setupWithDb();
+    expect(() => markSessionAnalysisStale('never-analyzed')).not.toThrow();
+    expect(getSessionAnalysisUsage('never-analyzed')).toHaveLength(0);
+  });
+
+  it('re-running saveAnalysisUsage on a stale row flips it back to fresh', async () => {
+    const { saveAnalysisUsage, getSessionAnalysisUsage, markSessionAnalysisStale } = await setupWithDb();
+    saveAnalysisUsage({
+      session_id: 'sess-1',
+      analysis_type: 'session',
+      provider: 'anthropic',
+      model: 'claude-opus-4-6',
+      input_tokens: 100,
+      output_tokens: 50,
+      estimated_cost_usd: 0.01,
+    });
+    markSessionAnalysisStale('sess-1');
+
+    saveAnalysisUsage({
+      session_id: 'sess-1',
+      analysis_type: 'session',
+      provider: 'anthropic',
+      model: 'claude-opus-4-6',
+      input_tokens: 200,
+      output_tokens: 80,
+      estimated_cost_usd: 0.02,
+    });
+
+    const rows = getSessionAnalysisUsage('sess-1');
+    expect(rows[0].analysis_status).toBe('fresh');
+    expect(rows[0].input_tokens).toBe(200);
   });
 });

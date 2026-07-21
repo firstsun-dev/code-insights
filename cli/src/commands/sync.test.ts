@@ -36,6 +36,11 @@ vi.mock('../db/write.js', () => ({
   recalculateUsageStats,
 }));
 
+const markSessionAnalysisStale = vi.fn();
+vi.mock('../analysis/analysis-usage-db.js', () => ({
+  markSessionAnalysisStale,
+}));
+
 const getAllProviders = vi.fn();
 vi.mock('../providers/registry.js', () => ({
   getAllProviders,
