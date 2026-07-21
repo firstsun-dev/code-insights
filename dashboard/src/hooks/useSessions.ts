@@ -7,6 +7,8 @@ interface SessionFilters {
   homeId?: string;
   limit?: number;
   offset?: number;
+  from?: string;
+  to?: string;
 }
 
 export function useSessions(filters?: SessionFilters) {

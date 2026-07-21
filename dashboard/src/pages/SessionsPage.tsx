@@ -4,6 +4,7 @@ import { useSessions } from '@/hooks/useSessions';
 import { useProjects } from '@/hooks/useProjects';
 import { useInsights } from '@/hooks/useInsights';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { computeDateRangeBounds } from '@/lib/date-utils';
 import { ProjectNav } from '@/components/sessions/ProjectNav';
 import { SessionListPanel } from '@/components/sessions/SessionListPanel';
 import { SessionDetailPanel } from '@/components/sessions/SessionDetailPanel';
@@ -35,7 +36,7 @@ export default function SessionsPage() {
     homeId: 'all',
     character: 'all',
     status: 'all',
-    dateRange: 'all',
+    dateRange: '7d',
     dateFrom: '',
     dateTo: '',
     outcome: 'all',
@@ -45,12 +46,15 @@ export default function SessionsPage() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
 
   const sessionParams = useMemo(() => {
-    const params: { projectId?: string; sourceTool?: string; homeId?: string; limit?: number } = { limit: 200 };
+    const params: { projectId?: string; sourceTool?: string; homeId?: string; limit?: number; from?: string; to?: string } = { limit: 200 };
     if (filters.project !== 'all') params.projectId = filters.project;
     if (filters.source !== 'all') params.sourceTool = filters.source;
     if (filters.homeId !== 'all') params.homeId = filters.homeId;
+    const { from, to } = computeDateRangeBounds(filters.dateRange, filters.dateFrom, filters.dateTo);
+    if (from) params.from = from;
+    if (to) params.to = to;
     return params;
-  }, [filters.project, filters.source, filters.homeId]);
+  }, [filters.project, filters.source, filters.homeId, filters.dateRange, filters.dateFrom, filters.dateTo]);
 
   const { data: sessions = [], isLoading: sessionsLoading } = useSessions(sessionParams);
   const { data: insights = [], isLoading: insightsLoading } = useInsights();
@@ -100,7 +104,7 @@ export default function SessionsPage() {
   );
 
   const handleClearFilters = useCallback(() => {
-    setFilters({ q: '', character: 'all', status: 'all', dateRange: 'all', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all' });
+    setFilters({ q: '', character: 'all', status: 'all', dateRange: '7d', dateFrom: '', dateTo: '', outcome: 'all', source: 'all', homeId: 'all' });
   }, [setFilters]);
 
   const selectedProjectName = useMemo(() => {

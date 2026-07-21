@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { usePersonalityProfile } from '@/hooks/usePersonalityProfile';
+import { usePersonalityProfile, usePersonalityWeeks } from '@/hooks/usePersonalityProfile';
 import { usePersonalityTrend } from '@/hooks/usePersonalityTrend';
 import { personalityGenerateStream } from '@/lib/api';
 import { parseSSEStream } from '@/lib/sse';
@@ -10,6 +10,7 @@ import { ExplorerExecutorGauge, PaceGauge } from '@/components/personality/Perso
 import { ArchetypeCard } from '@/components/personality/ArchetypeCard';
 import { PersonalityTrendChart } from '@/components/personality/PersonalityTrendChart';
 import { ProjectPersonalitySwitcher } from '@/components/personality/ProjectPersonalitySwitcher';
+import { WeekSelector } from '@/components/patterns/WeekSelector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorCard } from '@/components/ErrorCard';
@@ -29,7 +30,7 @@ export default function PersonalityPage() {
   const [localProfile, setLocalProfile] = useState<PersonalityProfile | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
-  const currentWeek = getCurrentIsoWeek();
+  const [currentWeek, setCurrentWeek] = useState<string>(() => getCurrentIsoWeek());
 
   const { data: profileData, isLoading, isError, refetch } = usePersonalityProfile({
     period: currentWeek,
@@ -38,18 +39,27 @@ export default function PersonalityPage() {
 
   const { data: trendData } = usePersonalityTrend({ projectId, weeks: 12 });
 
+  const { data: weeksData } = usePersonalityWeeks({
+    project: projectId === '__all__' ? undefined : projectId,
+  });
+  const weeks = weeksData?.weeks ?? [];
+
   // Abort in-flight generation on unmount
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
   }, []);
 
   // Reset local (freshly-generated) profile and any stale error whenever the scope
-  // changes so we fall back to the fetched profile for the new scope instead of
-  // showing stale data or an error from a different project/period.
+  // (project or week) changes so we fall back to the fetched profile for the new
+  // scope instead of showing stale data or an error from a different project/period.
   useEffect(() => {
     setLocalProfile(null);
     setGenerationError(null);
-  }, [projectId]);
+  }, [projectId, currentWeek]);
+
+  const handleWeekChange = useCallback((week: string) => {
+    setCurrentWeek(week);
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     abortRef.current?.abort();
@@ -128,7 +138,10 @@ export default function PersonalityPage() {
             A deterministic trait profile plus an optional LLM-written narrative
           </p>
         </div>
-        <ProjectPersonalitySwitcher value={projectId} onChange={setProjectId} />
+        <div className="flex flex-col items-end gap-2">
+          <WeekSelector currentWeek={currentWeek} weeks={weeks} onWeekChange={handleWeekChange} />
+          <ProjectPersonalitySwitcher value={projectId} onChange={setProjectId} period={currentWeek} />
+        </div>
       </div>
 
       {!hasEnoughSessions && (

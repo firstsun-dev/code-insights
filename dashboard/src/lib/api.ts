@@ -74,6 +74,8 @@ export function fetchSessions(params?: {
   homeId?: string;
   limit?: number;
   offset?: number;
+  from?: string;
+  to?: string;
 }) {
   const q = new URLSearchParams();
   if (params?.projectId) q.set('projectId', params.projectId);
@@ -81,6 +83,8 @@ export function fetchSessions(params?: {
   if (params?.homeId) q.set('homeId', params.homeId);
   if (params?.limit !== undefined) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
+  if (params?.from) q.set('from', params.from);
+  if (params?.to) q.set('to', params.to);
   const qs = q.toString() ? `?${q.toString()}` : '';
   return request<{ sessions: Session[] }>(`/sessions${qs}`);
 }
@@ -613,6 +617,20 @@ export function fetchPersonalityTrend(params?: { projectId?: string; weeks?: num
   if (params?.weeks) q.set('weeks', String(params.weeks));
   const qs = q.toString() ? `?${q.toString()}` : '';
   return request<PersonalityTrendResponse>(`/personality/trend${qs}`);
+}
+
+export function fetchPersonalityProjects(params?: { period?: string }) {
+  const q = new URLSearchParams();
+  if (params?.period) q.set('period', params.period);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request<{ projects: Array<{ id: string; name: string }> }>(`/personality/projects${qs}`);
+}
+
+export function fetchPersonalityWeeks(params?: { project?: string }) {
+  const q = new URLSearchParams();
+  if (params?.project) q.set('project', params.project);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request<{ weeks: WeekInfo[] }>(`/personality/weeks${qs}`);
 }
 
 export async function personalityGenerateStream(
