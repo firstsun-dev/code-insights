@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { CHART_COLORS } from '@/lib/constants/colors';
 import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import { HomeSelect } from '@/components/filters/HomeSelect';
+import { SortableTh } from '@/components/ui/sortable-th';
+import { useSort } from '@/lib/hooks/useSort';
 import {
   BarChart,
   Bar,
@@ -163,15 +165,55 @@ export default function AnalyticsPage() {
       }
     }
 
-    return Object.values(statsMap).sort((a, b) => b.sessionCount - a.sessionCount);
+    return Object.values(statsMap);
   }, [projects, filteredSessions, filteredInsights]);
+
+  type ProjectSortKey =
+    | 'projectName'
+    | 'sessionCount'
+    | 'summary'
+    | 'decision'
+    | 'learning'
+    | 'estimatedCostUsd'
+    | 'tokens';
+
+  const { sorted: sortedProjectStats, sortKey: projectSortKey, sortDirection: projectSortDirection, toggleSort: toggleProjectSort } = useSort<
+    (typeof projectStats)[number],
+    ProjectSortKey
+  >(
+    projectStats,
+    (p, key) => {
+      switch (key) {
+        case 'projectName':
+          return p.projectName;
+        case 'sessionCount':
+          return p.sessionCount;
+        case 'summary':
+          return p.insightCounts.summary;
+        case 'decision':
+          return p.insightCounts.decision;
+        case 'learning':
+          return p.insightCounts.learning;
+        case 'estimatedCostUsd':
+          return p.estimatedCostUsd;
+        case 'tokens':
+          return p.totalInputTokens + p.totalOutputTokens;
+      }
+    },
+    { key: 'sessionCount', direction: 'desc' }
+  );
+
+  const handleProjectSort = (key: ProjectSortKey) => {
+    toggleProjectSort(key);
+    setProjectPage(0);
+  };
 
   const PROJECT_PAGE_SIZE = 10;
   const projectPageCount = Math.max(1, Math.ceil(projectStats.length / PROJECT_PAGE_SIZE));
   // Clamp rather than reset via effect: keeps this a pure render-time derivation
   // even when a range/source change shrinks the list out from under the current page.
   const currentProjectPage = Math.min(projectPage, projectPageCount - 1);
-  const pagedProjectStats = projectStats.slice(
+  const pagedProjectStats = sortedProjectStats.slice(
     currentProjectPage * PROJECT_PAGE_SIZE,
     (currentProjectPage + 1) * PROJECT_PAGE_SIZE
   );
@@ -428,13 +470,54 @@ export default function AnalyticsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="py-3 text-left font-medium">Project</th>
-                  <th className="py-3 text-right font-medium">Sessions</th>
-                  <th className="py-3 text-right font-medium">Summaries</th>
-                  <th className="py-3 text-right font-medium">Decisions</th>
-                  <th className="py-3 text-right font-medium">Learnings</th>
-                  <th className="py-3 text-right font-medium">Est. Cost</th>
-                  <th className="py-3 text-right font-medium">Tokens</th>
+                  <SortableTh
+                    label="Project"
+                    active={projectSortKey === 'projectName'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('projectName')}
+                  />
+                  <SortableTh
+                    label="Sessions"
+                    align="right"
+                    active={projectSortKey === 'sessionCount'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('sessionCount')}
+                  />
+                  <SortableTh
+                    label="Summaries"
+                    align="right"
+                    active={projectSortKey === 'summary'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('summary')}
+                  />
+                  <SortableTh
+                    label="Decisions"
+                    align="right"
+                    active={projectSortKey === 'decision'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('decision')}
+                  />
+                  <SortableTh
+                    label="Learnings"
+                    align="right"
+                    active={projectSortKey === 'learning'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('learning')}
+                  />
+                  <SortableTh
+                    label="Est. Cost"
+                    align="right"
+                    active={projectSortKey === 'estimatedCostUsd'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('estimatedCostUsd')}
+                  />
+                  <SortableTh
+                    label="Tokens"
+                    align="right"
+                    active={projectSortKey === 'tokens'}
+                    direction={projectSortDirection}
+                    onClick={() => handleProjectSort('tokens')}
+                  />
                 </tr>
               </thead>
               <tbody>
