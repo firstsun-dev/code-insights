@@ -65,7 +65,7 @@
     "@ax-llm/ax"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "keywords": [
     "claude",
@@ -108,7 +108,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.15.30",
-    "typescript": "^5.9.3"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

@@ -15,7 +15,7 @@
     "test:watch": "vitest"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "license": "MIT",
   "private": true,
@@ -32,9 +32,9 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.15.30",
+    "@types/node": "catalog:",
     "better-sqlite3": "^12.6.2",
     "sqlite-vec": "^0.1.9",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }
