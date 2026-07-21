@@ -30,7 +30,7 @@ import type { Insight, InsightType, DispatchPrefill, SessionCharacter, Effective
 import { InsightTypePills } from '@/components/filters/InsightTypePills';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
-import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import { HomeMultiSelect } from '@/components/filters/HomeMultiSelect';
 import { ProjectMultiSelect } from '@/components/filters/ProjectMultiSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
@@ -260,6 +260,10 @@ export default function InsightsPage() {
     () => filters.project === 'all' ? [] : filters.project.split(',').filter(Boolean),
     [filters.project]
   );
+  const selectedSourceTools = useMemo(
+    () => filters.source === 'all' ? [] : filters.source.split(',').filter(Boolean),
+    [filters.source]
+  );
 
   const availableProjects = useMemo(() => {
     if (selectedHomeIds.length === 0) return projects;
@@ -298,9 +302,9 @@ export default function InsightsPage() {
           return false;
         }
       }
-      if (filters.source !== 'all') {
+      if (selectedSourceTools.length > 0) {
         const sourceTool = sessionSourceMap.get(i.session_id);
-        if (sourceTool !== filters.source) return false;
+        if (!sourceTool || !selectedSourceTools.includes(sourceTool)) return false;
       }
       if (selectedHomeIds.length > 0) {
         const sessionHomeId = sessionHomeMap.get(i.session_id);
@@ -308,7 +312,7 @@ export default function InsightsPage() {
       }
       return true;
     });
-  }, [insights, activeTypes, filters.q, filters.source, patternInsightIds, selectedHomeIds, selectedProjectIds, sessionSourceMap, sessionHomeMap]);
+  }, [insights, activeTypes, filters.q, selectedSourceTools, patternInsightIds, selectedHomeIds, selectedProjectIds, sessionSourceMap, sessionHomeMap]);
 
   const hasFilters = !!filters.q || filters.type !== 'all' || filters.project !== 'all' || !!filters.pattern || filters.source !== 'all' || filters.homeId !== 'all';
 
@@ -455,9 +459,9 @@ export default function InsightsPage() {
             onValueChange={(ids) => setFilter('project', ids.length > 0 ? ids.join(',') : 'all')}
           />
 
-          <SourceToolSelect
-            value={filters.source}
-            onValueChange={(v) => setFilter('source', v)}
+          <SourceToolMultiSelect
+            value={selectedSourceTools}
+            onValueChange={(ids) => setFilter('source', ids.length > 0 ? ids.join(',') : 'all')}
             className="w-[140px]"
           />
 

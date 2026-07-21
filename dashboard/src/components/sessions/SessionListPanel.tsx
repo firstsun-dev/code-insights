@@ -24,7 +24,7 @@ import { useQueuedSessionIds } from '@/hooks/useAnalysisQueue';
 import { useAnalyzedSessionIds } from '@/hooks/useAnalyzedSessionIds';
 import { SaveFilterPopover } from '@/components/filters/SaveFilterPopover';
 import { SavedFiltersDropdown } from '@/components/filters/SavedFiltersDropdown';
-import { SourceToolSelect } from '@/components/filters/SourceToolSelect';
+import { SourceToolMultiSelect } from '@/components/filters/SourceToolMultiSelect';
 import { HomeSelect } from '@/components/filters/HomeSelect';
 import { useSavedFilters } from '@/hooks/useSavedFilters';
 
@@ -98,6 +98,11 @@ export function SessionListPanel({
 }: SessionListPanelProps) {
   const [customDateOpen, setCustomDateOpen] = useState(false);
   const { savedFilters, saveFilter, deleteFilter } = useSavedFilters('sessions');
+
+  const selectedSourceTools = useMemo(
+    () => (!filters.source || filters.source === 'all') ? [] : filters.source.split(',').filter(Boolean),
+    [filters.source]
+  );
 
   const { data: deletedCount = 0 } = useDeletedSessionCount(projectId);
   const queuedSessionIds = useQueuedSessionIds();
@@ -332,9 +337,9 @@ export function SessionListPanel({
 
         {/* Row 4: Source + Home + Save */}
         <div className="flex gap-2 items-center">
-          <SourceToolSelect
-            value={filters.source || 'all'}
-            onValueChange={(v) => onFilterChange('source', v)}
+          <SourceToolMultiSelect
+            value={selectedSourceTools}
+            onValueChange={(ids) => onFilterChange('source', ids.length > 0 ? ids.join(',') : 'all')}
             className="h-7 text-xs flex-1 min-w-0"
           />
 
