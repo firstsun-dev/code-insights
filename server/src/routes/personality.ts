@@ -2,12 +2,14 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '@code-insights/cli/db/client';
 import { jsonrepair } from 'jsonrepair';
+import { loadConfig } from '@code-insights/cli/utils/config';
 import type { PersonalityProfile, CognitiveFunctionKey, MBTIType } from '@code-insights/cli/types';
 import { createLLMClient } from '../llm/client.js';
 import { requireLLM } from './route-helpers.js';
 import { extractJsonPayload } from '../llm/response-parsers.js';
 import { PERSONALITY_SYSTEM_PROMPT, generatePersonalityPrompt } from '../llm/reflect-prompts.js';
-import { computePersonalityProfile, type PersonalityFacetInput, type PersonalityInsightInput } from '../llm/personality.js';
+import { computePersonalityProfile, deriveMbti, PERSONALITY_ANALYSIS_VERSION, type PersonalityFacetInput, type PersonalityInsightInput } from '../llm/personality.js';
+import { scoreCognitiveFunctionsByLlmVote, clampVoteRounds } from '../llm/personality-vote.js';
 import { buildWhereClause, parseIsoWeek, formatIsoWeek } from './shared-aggregation.js';
 import { safeParseJson } from '../utils.js';
 import {
@@ -147,6 +149,11 @@ function readSnapshot(db: ReturnType<typeof getDb>, period: string, projectId: s
   try {
     const profile = JSON.parse(row.results_json) as PersonalityProfile;
     if (profile.profileVersion !== CURRENT_PROFILE_VERSION) return null;
+    // Also invalidate on a stale analysisVersion (e.g. rows scored by the old
+    // mean-confidence cognitiveFunctions formula, PERSONALITY_ANALYSIS_VERSION 2.0.0) —
+    // profileVersion alone doesn't change when a scoring FORMULA changes, only when the
+    // response SHAPE does, so a formula fix would otherwise be served stale forever.
+    if (profile.analysisVersion !== PERSONALITY_ANALYSIS_VERSION) return null;
     return profile;
   } catch {
     return null;
@@ -420,12 +427,38 @@ app.post('/generate', requireLLM(), async (c) => {
 
       const profile = computePersonalityProfile(facets, insights, period, projectId);
 
+      const client = createLLMClient();
+
+      // Cognitive function scoring mode — 'formula' (computePersonalityProfile's default,
+      // deterministic, no LLM call) or 'llm-vote' (opt-in via config.json, see
+      // ClaudeInsightConfig.dashboard.analysis.personality in cli/src/types.ts). Runs BEFORE
+      // the archetype/topCandidates prompt below so that call receives whichever function
+      // scores actually end up in the persisted profile, not the formula scores it would
+      // otherwise silently narrate over.
+      const personalityConfig = loadConfig()?.dashboard?.analysis?.personality;
+      if (personalityConfig?.cognitiveFunctionScoring === 'llm-vote') {
+        await stream.writeSSE({
+          event: 'progress',
+          data: JSON.stringify({ phase: 'voting', message: 'Scoring cognitive functions (LLM vote)...' }),
+        });
+
+        const rounds = clampVoteRounds(personalityConfig.llmVoteRounds);
+        const votedFunctions = await scoreCognitiveFunctionsByLlmVote(facets, client, rounds, abortSignal);
+        // Only adopt the vote result if it produced at least one real score — a total
+        // failure (e.g. every round errored/timed out) falls back to the formula profile
+        // already computed above rather than persisting an all-null cognitiveFunctions.
+        if (votedFunctions.some(f => f.score !== null)) {
+          profile.cognitiveFunctions = votedFunctions;
+          profile.mbti = deriveMbti(votedFunctions);
+          profile.cognitiveFunctionScoringMode = 'llm-vote';
+        }
+      }
+
       await stream.writeSSE({
         event: 'progress',
         data: JSON.stringify({ phase: 'synthesizing', message: 'Generating personality narrative...' }),
       });
 
-      const client = createLLMClient();
       const traitScore = (key: 'precision' | 'resilience' | 'autonomy' | 'craft') =>
         profile.traits.find(t => t.key === key)?.score ?? null;
 

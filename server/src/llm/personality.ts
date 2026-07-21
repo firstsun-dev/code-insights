@@ -5,6 +5,10 @@
 export {
   computePersonalityProfile,
   PERSONALITY_ANALYSIS_VERSION,
+  deriveMbti,
+  bandFor,
+  EFFECTIVE_PATTERN_TO_FUNCTION,
+  COGNITIVE_FUNCTION_ORDER,
 } from '@code-insights/cli/analysis/personality';
 export type {
   PersonalityFacetInput,

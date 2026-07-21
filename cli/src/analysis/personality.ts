@@ -5,10 +5,19 @@
 // the server route (server/src/routes/personality.ts) import this module — no
 // reimplementation of scoring logic in either caller.
 //
-// The LLM is used ONLY for the optional `archetype` prose (see server/src/llm/
-// reflect-prompts.ts generatePersonalityPrompt). Every numeric field on
-// PersonalityProfile produced here is deterministic and reproducible from the same
-// inputs — the LLM never contributes a number to this profile.
+// Every numeric field THIS MODULE produces is deterministic and reproducible from the
+// same inputs — this file itself never calls an LLM. Two callers layer optional
+// LLM-authored numbers on top of what this module computes, both in server/src/llm/:
+//   - reflect-prompts.ts generatePersonalityPrompt: the `archetype` prose plus
+//     `mbti.topCandidates[].likelihood`, a top-5 ranked MBTI guess.
+//   - personality-vote.ts scoreCognitiveFunctionsByLlmVote: an OPT-IN alternative to
+//     computeCognitiveFunctions below, gated on dashboard.analysis.personality.
+//     cognitiveFunctionScoring === 'llm-vote' in config.json. When active, it replaces
+//     `cognitiveFunctions` (and therefore `mbti`, re-derived from those scores) with the
+//     average of N independent LLM scoring rounds instead of the formula in this file —
+//     see PersonalityProfile.cognitiveFunctionScoringMode, which records which path ran.
+//     computePersonalityProfile below always returns the deterministic 'formula' scores;
+//     only the server route (POST /generate) can override them post hoc.
 
 import type {
   FrictionPoint,
@@ -26,8 +35,12 @@ import type {
 
 /** Formula version for the deterministic scoring below. Bump when any formula changes
  * so cached personality_snapshots rows can be identified as stale by consumers that care.
- * Bumped to 2.0.0 for the cognitiveFunctions + mbti addition (profileVersion 2). */
-export const PERSONALITY_ANALYSIS_VERSION = '2.0.0';
+ * Bumped to 2.0.0 for the cognitiveFunctions + mbti addition (profileVersion 2).
+ * Bumped to 2.1.0 when computeCognitiveFunctions switched from mean-confidence to
+ * relative-frequency-share scoring (see that function's doc comment) — readSnapshot in
+ * server/src/routes/personality.ts treats any cached row below this version as stale so
+ * old confidence-scored rows get recomputed instead of served forever. */
+export const PERSONALITY_ANALYSIS_VERSION = '2.1.0';
 
 /**
  * Per-session facet input. Deliberately a flattened, caller-friendly shape rather than
@@ -91,7 +104,7 @@ function normalizeConfidence(raw: number): number {
   return raw;
 }
 
-function bandFor(score: number): 'low' | 'moderate' | 'high' {
+export function bandFor(score: number): 'low' | 'moderate' | 'high' {
   if (score >= 65) return 'high';
   if (score >= 35) return 'moderate';
   return 'low';
@@ -276,7 +289,7 @@ function computePace(facets: PersonalityFacetInput[]): PersonalityPace {
 //   self-correction           -> Fi (Introverted Feeling — internally-driven correction against one's own standard)
 //   effective-tooling         -> Fe (Extraverted Feeling — attunement to and effective use of the
 //                                    external/collaborative environment)
-const EFFECTIVE_PATTERN_TO_FUNCTION: Record<string, CognitiveFunctionKey> = {
+export const EFFECTIVE_PATTERN_TO_FUNCTION: Record<string, CognitiveFunctionKey> = {
   'structured-planning': 'ni',
   'context-gathering': 'ne',
   'domain-expertise': 'si',
@@ -288,37 +301,62 @@ const EFFECTIVE_PATTERN_TO_FUNCTION: Record<string, CognitiveFunctionKey> = {
 };
 
 /** Stable, fixed display/serialization order for the 8 cognitive functions. */
-const COGNITIVE_FUNCTION_ORDER: CognitiveFunctionKey[] = ['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe'];
+export const COGNITIVE_FUNCTION_ORDER: CognitiveFunctionKey[] = ['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe'];
 
 /**
- * One score per Jungian cognitive function: mean confidence (normalized 0-100) of
- * effective-pattern instances whose category maps to that function, via
- * EFFECTIVE_PATTERN_TO_FUNCTION above. Same aggregation style as computeCraft — a flat
- * mean over all matching pattern instances, not a per-session average. Zero instances
- * for a function -> null score, sampleSize 0 (never defaults to 0/neutral — "no signal"
- * and "measured and low" are different things, same convention as every other score
- * in this file).
+ * One score per Jungian cognitive function: RELATIVE FREQUENCY SHARE of effective-pattern
+ * instances mapped to that function (via EFFECTIVE_PATTERN_TO_FUNCTION above) — NOT mean
+ * confidence, despite that being the v1 (analysisVersion 2.0.0) formula.
+ *
+ * Why the change: effective-pattern confidence is written by the analysis prompts with a
+ * hard floor of 70 ("Require a minimum confidence score of 70 for any decision or
+ * learning. Drop insights below this threshold." — cli/src/analysis/prompts.ts) and
+ * clusters in 70-95 in practice. Averaging confidence therefore made every function that
+ * had any samples at all land at or above 65 (the "high" band threshold from bandFor)
+ * almost by construction — it measured "how sure the LLM was when it flagged an
+ * instance," not "how strongly this function shows up relative to the other 7." Jungian
+ * functions (and MBTI more broadly) are an ipsative/competing construct by design —
+ * strength in one function implies relatively less reliance on its opposite — so a score
+ * that can't differentiate across the 8 functions can't produce a meaningful profile.
+ *
+ * Formula: share = count(function) / totalCount(all mapped instances in scope).
+ * fairShare = 1 / 8 (the uniform baseline if all 8 functions were equally represented).
+ * score = round(min(100, (share / fairShare) * 50)) — a function sitting exactly at its
+ * fair share scores 50 (moderate); one at 2x fair share or more scores 100 (high,
+ * capped); one entirely absent relative to the total scores toward 0. This directly
+ * reflects "how often this function's behavior shows up relative to the others," which
+ * is the actual claim a Jungian function score makes, and — unlike mean confidence —
+ * guarantees differentiation across the 8 scores whenever pattern-category usage isn't
+ * perfectly uniform (the overwhelmingly common case). Zero total instances -> every
+ * function null (never a fabricated midpoint); zero instances for one function specifically
+ * -> null score, sampleSize 0 for that function only (same "no signal" convention as every
+ * other score in this file).
  */
 function computeCognitiveFunctions(facets: PersonalityFacetInput[]): CognitiveFunctionScore[] {
-  const sums = new Map<CognitiveFunctionKey, number>();
   const counts = new Map<CognitiveFunctionKey, number>();
+  let totalCount = 0;
 
   for (const facet of facets) {
     for (const ep of facet.effectivePatterns) {
       const fn = EFFECTIVE_PATTERN_TO_FUNCTION[ep.category];
       if (!fn) continue; // unmapped/unknown category — not one of the 8 known effective-pattern categories
-      if (typeof ep.confidence !== 'number' || !Number.isFinite(ep.confidence)) continue;
-      sums.set(fn, (sums.get(fn) ?? 0) + normalizeConfidence(ep.confidence));
       counts.set(fn, (counts.get(fn) ?? 0) + 1);
+      totalCount++;
     }
   }
 
+  if (totalCount === 0) {
+    return COGNITIVE_FUNCTION_ORDER.map(key => ({ key, score: null, sampleSize: 0 }));
+  }
+
+  const fairShare = 1 / COGNITIVE_FUNCTION_ORDER.length;
   return COGNITIVE_FUNCTION_ORDER.map(key => {
     const count = counts.get(key) ?? 0;
     if (count === 0) {
       return { key, score: null, sampleSize: 0 };
     }
-    const score = Math.round((sums.get(key) ?? 0) / count);
+    const share = count / totalCount;
+    const score = Math.round(Math.min(100, (share / fairShare) * 50));
     return { key, score, band: bandFor(score), sampleSize: count };
   });
 }
@@ -455,6 +493,7 @@ export function computePersonalityProfile(
     axis,
     pace,
     cognitiveFunctions,
+    cognitiveFunctionScoringMode: 'formula',
     mbti,
     computedAt: new Date().toISOString(),
     analysisVersion: PERSONALITY_ANALYSIS_VERSION,

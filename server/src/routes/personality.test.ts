@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { runMigrations } from '@code-insights/cli/db/schema';
+import { PERSONALITY_ANALYSIS_VERSION } from '@code-insights/cli/analysis/personality';
 
 // ──────────────────────────────────────────────────────
 // Module-scoped mutable DB reference for mocking.
@@ -104,9 +105,14 @@ describe('Personality routes', () => {
   });
 
   describe('GET /api/personality', () => {
-    it('serves a cached snapshot as-is when its profileVersion matches the current version', async () => {
+    it('serves a cached snapshot as-is when its profileVersion and analysisVersion match the current version', async () => {
       seedSnapshot('2026-W30', '__all__', {
-        results_json: JSON.stringify({ profileVersion: 2, sessionCount: 3, marker: 'from-cache' }),
+        results_json: JSON.stringify({
+          profileVersion: 2,
+          analysisVersion: PERSONALITY_ANALYSIS_VERSION,
+          sessionCount: 3,
+          marker: 'from-cache',
+        }),
       });
 
       const app = createApp();
@@ -149,6 +155,27 @@ describe('Personality routes', () => {
       const body = await res.json();
       expect(body.marker).toBeUndefined();
       expect(body.profileVersion).toBe(2);
+    });
+
+    it('ignores a cached snapshot with a stale analysisVersion (old scoring formula) and recomputes fresh instead', async () => {
+      // Simulates a row persisted by the old mean-confidence cognitiveFunctions formula
+      // (analysisVersion 2.0.0) — profileVersion still matches (2), but the formula that
+      // produced the numbers has since changed, so it must not be served as a cache hit.
+      seedSnapshot('2026-W30', '__all__', {
+        results_json: JSON.stringify({
+          profileVersion: 2,
+          analysisVersion: '2.0.0',
+          sessionCount: 3,
+          marker: 'stale-formula-cache',
+        }),
+      });
+
+      const app = createApp();
+      const res = await app.request('/api/personality?period=2026-W30');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.marker).toBeUndefined();
+      expect(body.analysisVersion).toBe(PERSONALITY_ANALYSIS_VERSION);
     });
   });
 
