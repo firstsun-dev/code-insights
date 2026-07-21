@@ -3,6 +3,7 @@ import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { AnalysisRunner, RunAnalysisParams, RunAnalysisResult } from './runner-types.js';
+import { sanitizeForUtf8 } from './unicode.js';
 
 /**
  * CodexNativeRunner — executes analysis via `codex exec` (non-interactive mode).
@@ -29,7 +30,10 @@ export class CodexNativeRunner implements AnalysisRunner {
     
     // Codex doesn't have a direct --append-system-prompt-file flag like Claude.
     // We combine system + user prompt into one instruction for Codex.
-    const fullPrompt = `${params.systemPrompt}\n\nUSER INSTRUCTIONS:\n${params.userPrompt}`;
+    const fullPrompt = sanitizeForUtf8(`${params.systemPrompt}
+
+USER INSTRUCTIONS:
+${params.userPrompt}`);
     
     const outputFile = join(tmpdir(), `codex-out-${fileId}.txt`);
     let schemaFile: string | undefined;
