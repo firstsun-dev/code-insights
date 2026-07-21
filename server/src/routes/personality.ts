@@ -131,13 +131,23 @@ interface PersonalitySnapshotRow {
   facet_count: number;
 }
 
+// Current shape's profileVersion (see PersonalityProfile['profileVersion'] in types.ts).
+// Snapshots persisted before the cognitiveFunctions + mbti addition were written with
+// profileVersion 1 (or no field at all, for rows from before profileVersion existed) and
+// are missing those fields entirely — treating them as a cache hit would serve incomplete
+// data straight to the frontend (MbtiCard/CognitiveFunctionRadarChart expect them to always
+// be present). Guard against that by treating anything below the current version as a miss.
+const CURRENT_PROFILE_VERSION = 2;
+
 function readSnapshot(db: ReturnType<typeof getDb>, period: string, projectId: string): PersonalityProfile | null {
   const row = db.prepare(
     `SELECT * FROM personality_snapshots WHERE period = ? AND project_id = ?`
   ).get(period, projectId) as PersonalitySnapshotRow | undefined;
   if (!row) return null;
   try {
-    return JSON.parse(row.results_json) as PersonalityProfile;
+    const profile = JSON.parse(row.results_json) as PersonalityProfile;
+    if (profile.profileVersion !== CURRENT_PROFILE_VERSION) return null;
+    return profile;
   } catch {
     return null;
   }
