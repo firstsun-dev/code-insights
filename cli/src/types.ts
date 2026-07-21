@@ -364,11 +364,37 @@ export interface PersonalityArchetype {   // LLM-generated prose only; entirely 
   growthAreas: string[];
 }
 
+// Jungian cognitive functions, one per effective-pattern category. See the
+// EFFECTIVE_PATTERN_TO_FUNCTION mapping comment in cli/src/analysis/personality.ts for
+// the deliberate judgment call behind which pattern category maps to which function.
+export type CognitiveFunctionKey = 'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi' | 'fe';
+
+export interface CognitiveFunctionScore {
+  key: CognitiveFunctionKey;
+  score: number | null;      // 0-100 normalized mean confidence; null = insufficient data
+  band?: 'low' | 'moderate' | 'high';
+  sampleSize: number;         // contributing effective-pattern instances; 0 = insufficient data
+}
+
+export type MBTIType =
+  | 'INTJ' | 'INTP' | 'ENTJ' | 'ENTP'
+  | 'INFJ' | 'INFP' | 'ENFJ' | 'ENFP'
+  | 'ISTJ' | 'ISFJ' | 'ESTJ' | 'ESFJ'
+  | 'ISTP' | 'ISFP' | 'ESTP' | 'ESFP';
+
+export interface MBTIProfile {
+  type: MBTIType | null;
+  functionStack: CognitiveFunctionKey[] | null; // [dominant, auxiliary, tertiary, inferior]
+  confidence: 'low' | 'moderate' | 'high' | null;
+}
+
 export interface PersonalityProfile {
-  profileVersion: 1;
+  profileVersion: 1 | 2;              // 2 adds cognitiveFunctions + mbti; 1 kept so old cached rows still type-check
   traits: PersonalityTrait[];        // precision, resilience, autonomy, craft
   axis: PersonalityBipolarAxis;      // explorer_executor
   pace: PersonalityPace;
+  cognitiveFunctions: CognitiveFunctionScore[];  // all 8, stable order: ni, ne, si, se, ti, te, fi, fe
+  mbti: MBTIProfile;
   archetype?: PersonalityArchetype;
   computedAt: string;                 // ISO 8601
   analysisVersion: string;            // rule-scoring formula version string, start at '1.0.0'

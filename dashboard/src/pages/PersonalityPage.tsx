@@ -6,8 +6,10 @@ import { personalityGenerateStream } from '@/lib/api';
 import { parseSSEStream } from '@/lib/sse';
 import { getCurrentIsoWeek } from '@/lib/date-utils';
 import { PersonalityRadarChart } from '@/components/personality/PersonalityRadarChart';
+import { CognitiveFunctionRadarChart } from '@/components/personality/CognitiveFunctionRadarChart';
 import { ExplorerExecutorGauge, PaceGauge } from '@/components/personality/PersonalityGauges';
 import { ArchetypeCard } from '@/components/personality/ArchetypeCard';
+import { MbtiCard } from '@/components/personality/MbtiCard';
 import { PersonalityTrendChart } from '@/components/personality/PersonalityTrendChart';
 import { ProjectPersonalitySwitcher } from '@/components/personality/ProjectPersonalitySwitcher';
 import { WeekSelector } from '@/components/patterns/WeekSelector';
@@ -179,7 +181,10 @@ export default function PersonalityPage() {
 
       {profile && (
         <>
-          <ArchetypeCard archetype={profile.archetype} generating={generating} onGenerate={handleGenerate} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ArchetypeCard archetype={profile.archetype} generating={generating} onGenerate={handleGenerate} />
+            <MbtiCard mbti={profile.mbti} functions={profile.cognitiveFunctions} />
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <PersonalityRadarChart traits={profile.traits} />
@@ -187,6 +192,10 @@ export default function PersonalityPage() {
               <ExplorerExecutorGauge axis={profile.axis} />
               <PaceGauge pace={profile.pace} />
             </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <CognitiveFunctionRadarChart functions={profile.cognitiveFunctions} />
           </div>
 
           {trendData && trendData.rows.length > 0 && (
