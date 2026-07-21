@@ -276,8 +276,7 @@ export function SessionListPanel({
                           placeholder="From (YYYY-MM-DD)"
                           value={filters.dateFrom}
                           onChange={(e) => {
-                            onFilterChange('dateFrom', e.target.value);
-                            onFilterChange('dateRange', 'custom');
+                            onSetFilters({ dateFrom: e.target.value, dateRange: 'custom' });
                           }}
                           className="h-7 text-xs"
                         />
@@ -285,8 +284,7 @@ export function SessionListPanel({
                           placeholder="To (YYYY-MM-DD)"
                           value={filters.dateTo}
                           onChange={(e) => {
-                            onFilterChange('dateTo', e.target.value);
-                            onFilterChange('dateRange', 'custom');
+                            onSetFilters({ dateTo: e.target.value, dateRange: 'custom' });
                           }}
                           className="h-7 text-xs"
                         />
@@ -299,9 +297,7 @@ export function SessionListPanel({
                   <button
                     key={preset.value}
                     onClick={() => {
-                      onFilterChange('dateRange', preset.value);
-                      onFilterChange('dateFrom', '');
-                      onFilterChange('dateTo', '');
+                      onSetFilters({ dateRange: preset.value, dateFrom: '', dateTo: '' });
                       setCustomDateOpen(false);
                     }}
                     className={`w-full text-xs text-left px-3 py-1.5 rounded hover:bg-accent transition-colors ${
