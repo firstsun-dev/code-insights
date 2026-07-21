@@ -18,11 +18,16 @@ import type {
   PersonalityTraitKey,
   PersonalityBipolarAxis,
   PersonalityPace,
+  CognitiveFunctionKey,
+  CognitiveFunctionScore,
+  MBTIType,
+  MBTIProfile,
 } from '../types.js';
 
 /** Formula version for the deterministic scoring below. Bump when any formula changes
- * so cached personality_snapshots rows can be identified as stale by consumers that care. */
-export const PERSONALITY_ANALYSIS_VERSION = '1.0.0';
+ * so cached personality_snapshots rows can be identified as stale by consumers that care.
+ * Bumped to 2.0.0 for the cognitiveFunctions + mbti addition (profileVersion 2). */
+export const PERSONALITY_ANALYSIS_VERSION = '2.0.0';
 
 /**
  * Per-session facet input. Deliberately a flattened, caller-friendly shape rather than
@@ -256,6 +261,170 @@ function computePace(facets: PersonalityFacetInput[]): PersonalityPace {
   return { value, sampleSize: withMessages.length };
 }
 
+// === Cognitive functions (Jungian) + MBTI derivation ===
+//
+// Deliberate judgment call, same spirit as EXPLORER_CHARACTERS/EXECUTOR_CHARACTERS above:
+// each of the 8 effective-pattern categories is mapped to the one Jungian cognitive
+// function it most directly evidences. This is a design choice, not a derived fact —
+// documented here so it can be revisited without archaeology:
+//   structured-planning       -> Ni (Introverted Intuition — singular strategic foresight)
+//   context-gathering         -> Ne (Extraverted Intuition — broad exploration of possibilities)
+//   domain-expertise          -> Si (Introverted Sensing — internalized experience/precedent)
+//   incremental-implementation -> Se (Extraverted Sensing — concrete present-moment action)
+//   systematic-debugging      -> Ti (Introverted Thinking — internal logical root-cause analysis)
+//   verification-workflow     -> Te (Extraverted Thinking — externally verifiable, goal-driven checking)
+//   self-correction           -> Fi (Introverted Feeling — internally-driven correction against one's own standard)
+//   effective-tooling         -> Fe (Extraverted Feeling — attunement to and effective use of the
+//                                    external/collaborative environment)
+const EFFECTIVE_PATTERN_TO_FUNCTION: Record<string, CognitiveFunctionKey> = {
+  'structured-planning': 'ni',
+  'context-gathering': 'ne',
+  'domain-expertise': 'si',
+  'incremental-implementation': 'se',
+  'systematic-debugging': 'ti',
+  'verification-workflow': 'te',
+  'self-correction': 'fi',
+  'effective-tooling': 'fe',
+};
+
+/** Stable, fixed display/serialization order for the 8 cognitive functions. */
+const COGNITIVE_FUNCTION_ORDER: CognitiveFunctionKey[] = ['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe'];
+
+/**
+ * One score per Jungian cognitive function: mean confidence (normalized 0-100) of
+ * effective-pattern instances whose category maps to that function, via
+ * EFFECTIVE_PATTERN_TO_FUNCTION above. Same aggregation style as computeCraft — a flat
+ * mean over all matching pattern instances, not a per-session average. Zero instances
+ * for a function -> null score, sampleSize 0 (never defaults to 0/neutral — "no signal"
+ * and "measured and low" are different things, same convention as every other score
+ * in this file).
+ */
+function computeCognitiveFunctions(facets: PersonalityFacetInput[]): CognitiveFunctionScore[] {
+  const sums = new Map<CognitiveFunctionKey, number>();
+  const counts = new Map<CognitiveFunctionKey, number>();
+
+  for (const facet of facets) {
+    for (const ep of facet.effectivePatterns) {
+      const fn = EFFECTIVE_PATTERN_TO_FUNCTION[ep.category];
+      if (!fn) continue; // unmapped/unknown category — not one of the 8 known effective-pattern categories
+      if (typeof ep.confidence !== 'number' || !Number.isFinite(ep.confidence)) continue;
+      sums.set(fn, (sums.get(fn) ?? 0) + normalizeConfidence(ep.confidence));
+      counts.set(fn, (counts.get(fn) ?? 0) + 1);
+    }
+  }
+
+  return COGNITIVE_FUNCTION_ORDER.map(key => {
+    const count = counts.get(key) ?? 0;
+    if (count === 0) {
+      return { key, score: null, sampleSize: 0 };
+    }
+    const score = Math.round((sums.get(key) ?? 0) / count);
+    return { key, score, band: bandFor(score), sampleSize: count };
+  });
+}
+
+// Standard 16-type Jungian function-stack table: [dominant, auxiliary, tertiary, inferior].
+// Well-established public typology (Myers-Briggs / Jungian cognitive function stacking),
+// hardcoded rather than derived — there is no formula that produces this table, it's a
+// fixed lookup by convention.
+const MBTI_FUNCTION_STACKS: Record<MBTIType, [CognitiveFunctionKey, CognitiveFunctionKey, CognitiveFunctionKey, CognitiveFunctionKey]> = {
+  INTJ: ['ni', 'te', 'fi', 'se'],
+  INTP: ['ti', 'ne', 'si', 'fe'],
+  ENTJ: ['te', 'ni', 'se', 'fi'],
+  ENTP: ['ne', 'ti', 'fe', 'si'],
+  INFJ: ['ni', 'fe', 'ti', 'se'],
+  INFP: ['fi', 'ne', 'si', 'te'],
+  ENFJ: ['fe', 'ni', 'se', 'ti'],
+  ENFP: ['ne', 'fi', 'te', 'si'],
+  ISTJ: ['si', 'te', 'fi', 'ne'],
+  ISFJ: ['si', 'fe', 'ti', 'ne'],
+  ESTJ: ['te', 'si', 'ne', 'fi'],
+  ESFJ: ['fe', 'si', 'ne', 'ti'],
+  ISTP: ['ti', 'se', 'ni', 'fe'],
+  ISFP: ['fi', 'se', 'ni', 'te'],
+  ESTP: ['se', 'ti', 'fe', 'ni'],
+  ESFP: ['se', 'fi', 'te', 'ni'],
+};
+
+/**
+ * Confidence band for the MBTI derivation. Deliberately NOT the same `bandFor` as trait/
+ * function scores — this represents how many of the 8 cognitive functions we actually
+ * observed (breadth of the picture), not a score magnitude. Judgment call on thresholds:
+ * observing at least 6/8 functions (75%) is "high" confidence in the derived type, 3-5/8
+ * (37.5-62.5%) is "moderate", and below that (but still >=2, the minimum to derive a type
+ * at all) is "low" — mirrors the same 65/35 split used by bandFor, just applied to
+ * function-coverage-count/8*100 instead of a score value.
+ */
+function mbtiConfidenceFor(nonNullCount: number): 'low' | 'moderate' | 'high' {
+  const coveragePct = (nonNullCount / COGNITIVE_FUNCTION_ORDER.length) * 100;
+  return bandFor(coveragePct);
+}
+
+/**
+ * Derive an MBTI type from the 8 cognitive function scores.
+ *
+ * 1. Dominant = highest-scoring non-null function. Requires >=2 non-null scores (need a
+ *    dominant AND an auxiliary to disambiguate a type) — otherwise returns a null profile.
+ * 2. Exactly 2 of the 16 types share any given dominant function (e.g. Ni is dominant for
+ *    both INTJ and INFJ) — filter MBTI_FUNCTION_STACKS down to those 2 candidates.
+ * 3. Pick whichever candidate's auxiliary (stack[1]) scored higher among our computed
+ *    function scores. A null score is treated as -Infinity in this comparison — a
+ *    function we have zero signal for cannot win the auxiliary tie-break.
+ * 4. If genuinely tied (equal, non -Infinity, auxiliary scores — including the case where
+ *    both are null), break the tie by picking the lexicographically first MBTI type name.
+ *    This is an arbitrary but STABLE choice: given identical input, the result is always
+ *    the same, which matters for a "personality type" users will see repeatedly — an
+ *    unstable tie-break would make the type flicker between two candidates run to run for
+ *    no real reason.
+ */
+export function deriveMbti(functions: CognitiveFunctionScore[]): MBTIProfile {
+  const scoreByKey = new Map<CognitiveFunctionKey, number | null>(functions.map(f => [f.key, f.score]));
+  const nonNull = functions.filter(f => f.score !== null);
+
+  if (nonNull.length < 2) {
+    return { type: null, functionStack: null, confidence: null };
+  }
+
+  // Dominant = highest score; ties broken by COGNITIVE_FUNCTION_ORDER (first in fixed order wins).
+  let dominant: CognitiveFunctionKey = nonNull[0].key;
+  let dominantScore = nonNull[0].score as number;
+  for (const f of nonNull) {
+    const s = f.score as number;
+    if (s > dominantScore) {
+      dominant = f.key;
+      dominantScore = s;
+    }
+  }
+
+  const candidates = (Object.keys(MBTI_FUNCTION_STACKS) as MBTIType[])
+    .filter(type => MBTI_FUNCTION_STACKS[type][0] === dominant)
+    .sort(); // lexicographic order — deterministic base for the tie-break below
+
+  const auxScore = (type: MBTIType): number => {
+    const aux = MBTI_FUNCTION_STACKS[type][1];
+    const s = scoreByKey.get(aux);
+    return typeof s === 'number' ? s : -Infinity;
+  };
+
+  let chosen = candidates[0];
+  let chosenAuxScore = auxScore(chosen);
+  for (const type of candidates.slice(1)) {
+    const s = auxScore(type);
+    if (s > chosenAuxScore) {
+      chosen = type;
+      chosenAuxScore = s;
+    }
+    // equal (including both -Infinity) -> keep `chosen`, which is already the
+    // lexicographically first candidate since `candidates` is sorted above.
+  }
+
+  return {
+    type: chosen,
+    functionStack: [...MBTI_FUNCTION_STACKS[chosen]],
+    confidence: mbtiConfidenceFor(nonNull.length),
+  };
+}
+
 /**
  * Compute a full PersonalityProfile from facets + insights already scoped to a given
  * period/project. All aggregation (filtering by period/project) happens in the caller
@@ -277,12 +446,16 @@ export function computePersonalityProfile(
 
   const axis = computeAxis(facets);
   const pace = computePace(facets);
+  const cognitiveFunctions = computeCognitiveFunctions(facets);
+  const mbti = deriveMbti(cognitiveFunctions);
 
   return {
-    profileVersion: 1,
+    profileVersion: 2,
     traits,
     axis,
     pace,
+    cognitiveFunctions,
+    mbti,
     computedAt: new Date().toISOString(),
     analysisVersion: PERSONALITY_ANALYSIS_VERSION,
     // One session_facets row per session in scope — sessionCount and facetCount are

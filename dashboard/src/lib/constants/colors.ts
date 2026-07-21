@@ -146,6 +146,21 @@ export const CHART_COLORS = {
     axis: '#06b6d4',        // cyan-500 — Explorer<->Executor gauge
     pace: '#f43f5e',        // rose-500 — Pace gauge
   },
+  // Cognitive function radar chart — reuses the same 8-color rotation as
+  // CHART_COLORS.models rather than inventing a new palette, since both are
+  // "several distinct categorical series on one chart" use cases. Order follows
+  // COGNITIVE_FUNCTION_ORDER in cli/src/analysis/personality.ts (ni, ne, si, se,
+  // ti, te, fi, fe) for a stable mapping between key and color.
+  cognitiveFunctions: {
+    ni: '#3b82f6',   // blue-500
+    ne: '#a855f7',   // purple-500
+    si: '#22c55e',   // green-500
+    se: '#f59e0b',   // amber-500
+    ti: '#f43f5e',   // rose-500
+    te: '#06b6d4',   // cyan-500
+    fi: '#ec4899',   // pink-500
+    fe: '#84cc16',   // lime-500
+  },
 } as const;
 
 /** Human-readable labels for the 4 unipolar personality traits. */
@@ -154,4 +169,29 @@ export const PERSONALITY_TRAIT_LABELS: Record<'precision' | 'resilience' | 'auto
   resilience: 'Resilience',
   autonomy: 'Autonomy',
   craft: 'Craft',
+};
+
+/** Human-readable labels for the 8 Jungian cognitive functions. */
+export const COGNITIVE_FUNCTION_LABELS: Record<'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi' | 'fe', string> = {
+  ni: 'Ni — Introverted Intuition',
+  ne: 'Ne — Extraverted Intuition',
+  si: 'Si — Introverted Sensing',
+  se: 'Se — Extraverted Sensing',
+  ti: 'Ti — Introverted Thinking',
+  te: 'Te — Extraverted Thinking',
+  fi: 'Fi — Introverted Feeling',
+  fe: 'Fe — Extraverted Feeling',
+};
+
+/** Short 2-letter codes for the 8 cognitive functions, used in compact contexts (e.g. the
+ * MBTI function stack in MbtiCard) where the full label would be too long. */
+export const COGNITIVE_FUNCTION_SHORT_LABELS: Record<'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi' | 'fe', string> = {
+  ni: 'Ni',
+  ne: 'Ne',
+  si: 'Si',
+  se: 'Se',
+  ti: 'Ti',
+  te: 'Te',
+  fi: 'Fi',
+  fe: 'Fe',
 };

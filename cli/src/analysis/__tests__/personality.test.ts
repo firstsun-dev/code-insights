@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
   computePersonalityProfile,
+  deriveMbti,
   PERSONALITY_ANALYSIS_VERSION,
   type PersonalityFacetInput,
   type PersonalityInsightInput,
 } from '../personality.js';
-import type { FrictionPoint, EffectivePattern, PersonalityTrait } from '../../types.js';
+import type {
+  FrictionPoint,
+  EffectivePattern,
+  PersonalityTrait,
+  CognitiveFunctionScore,
+  CognitiveFunctionKey,
+} from '../../types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +52,24 @@ function trait(traits: PersonalityTrait[], key: string): PersonalityTrait {
   const t = traits.find(t => t.key === key);
   if (!t) throw new Error(`trait ${key} not found`);
   return t;
+}
+
+function cogFn(traits: CognitiveFunctionScore[], key: string): CognitiveFunctionScore {
+  const t = traits.find(t => t.key === key);
+  if (!t) throw new Error(`cognitive function ${key} not found`);
+  return t;
+}
+
+/** Build a full 8-entry CognitiveFunctionScore[] (stable order) from a partial score map,
+ * with unspecified functions defaulting to null/0 — mirrors computeCognitiveFunctions'
+ * null-handling for absent categories, used to unit-test deriveMbti in isolation. */
+function cogFns(scores: Partial<Record<CognitiveFunctionKey, number>>): CognitiveFunctionScore[] {
+  const order: CognitiveFunctionKey[] = ['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe'];
+  return order.map(key => {
+    const score = scores[key];
+    if (score === undefined) return { key, score: null, sampleSize: 0 };
+    return { key, score, sampleSize: 1 };
+  });
 }
 
 // ── Happy path: realistic mixed facets ─────────────────────────────────────────
@@ -106,7 +131,7 @@ describe('computePersonalityProfile — happy path', () => {
 
     const profile = computePersonalityProfile(facets, insights, '2026-W29', '__all__');
 
-    expect(profile.profileVersion).toBe(1);
+    expect(profile.profileVersion).toBe(2);
     expect(profile.analysisVersion).toBe(PERSONALITY_ANALYSIS_VERSION);
     expect(profile.period).toBe('2026-W29');
     expect(profile.projectId).toBe('__all__');
@@ -252,5 +277,150 @@ describe('computePersonalityProfile — pace', () => {
     const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
     expect(profile.pace.sampleSize).toBe(1);
     expect(profile.pace.value).not.toBeNull();
+  });
+});
+
+// ── Cognitive functions ──────────────────────────────────────────────────────
+
+const PATTERN_TO_FUNCTION: Record<string, string> = {
+  'structured-planning': 'ni',
+  'context-gathering': 'ne',
+  'domain-expertise': 'si',
+  'incremental-implementation': 'se',
+  'systematic-debugging': 'ti',
+  'verification-workflow': 'te',
+  'self-correction': 'fi',
+  'effective-tooling': 'fe',
+};
+
+describe('computePersonalityProfile — cognitive functions', () => {
+  it('scores all 8 functions from mean confidence of their mapped pattern category', () => {
+    const facets: PersonalityFacetInput[] = [
+      facet({
+        effectivePatterns: [
+          ep({ category: 'structured-planning', confidence: 90 }),
+          ep({ category: 'structured-planning', confidence: 70 }), // ni: (90+70)/2 = 80
+          ep({ category: 'context-gathering', confidence: 60 }),   // ne: 60
+          ep({ category: 'domain-expertise', confidence: 40 }),    // si: 40
+          ep({ category: 'incremental-implementation', confidence: 100 }), // se: 100
+          ep({ category: 'systematic-debugging', confidence: 55 }), // ti: 55
+          ep({ category: 'verification-workflow', confidence: 65 }), // te: 65
+          ep({ category: 'self-correction', confidence: 20 }),      // fi: 20
+          ep({ category: 'effective-tooling', confidence: 75 }),    // fe: 75
+        ],
+      }),
+    ];
+
+    const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+    expect(profile.cognitiveFunctions).toHaveLength(8);
+    // Stable order check
+    expect(profile.cognitiveFunctions.map(f => f.key)).toEqual(['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe']);
+
+    expect(cogFn(profile.cognitiveFunctions, 'ni').score).toBe(80);
+    expect(cogFn(profile.cognitiveFunctions, 'ni').sampleSize).toBe(2);
+    expect(cogFn(profile.cognitiveFunctions, 'ne').score).toBe(60);
+    expect(cogFn(profile.cognitiveFunctions, 'si').score).toBe(40);
+    expect(cogFn(profile.cognitiveFunctions, 'se').score).toBe(100);
+    expect(cogFn(profile.cognitiveFunctions, 'ti').score).toBe(55);
+    expect(cogFn(profile.cognitiveFunctions, 'te').score).toBe(65);
+    expect(cogFn(profile.cognitiveFunctions, 'fi').score).toBe(20);
+    expect(cogFn(profile.cognitiveFunctions, 'fe').score).toBe(75);
+  });
+
+  it('is null with sampleSize 0 for a function whose category has zero pattern instances', () => {
+    const facets: PersonalityFacetInput[] = [
+      facet({ effectivePatterns: [ep({ category: 'structured-planning', confidence: 80 })] }),
+    ];
+    const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+    const fe = cogFn(profile.cognitiveFunctions, 'fe');
+    expect(fe.score).toBeNull();
+    expect(fe.sampleSize).toBe(0);
+    expect(fe.band).toBeUndefined();
+  });
+
+  it('maps each of the 8 known categories to its documented function independently', () => {
+    for (const [category, fn] of Object.entries(PATTERN_TO_FUNCTION)) {
+      const facets: PersonalityFacetInput[] = [
+        facet({ effectivePatterns: [ep({ category, confidence: 88 })] }),
+      ];
+      const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+      expect(cogFn(profile.cognitiveFunctions, fn).score).toBe(88);
+    }
+  });
+});
+
+// ── MBTI derivation ──────────────────────────────────────────────────────────
+
+describe('deriveMbti', () => {
+  it('returns a null profile with fewer than 2 non-null function scores', () => {
+    expect(deriveMbti(cogFns({}))).toEqual({ type: null, functionStack: null, confidence: null });
+    expect(deriveMbti(cogFns({ ni: 80 }))).toEqual({ type: null, functionStack: null, confidence: null });
+  });
+
+  it('derives INTJ from dominant Ni with higher Te than Fe', () => {
+    const result = deriveMbti(cogFns({ ni: 90, te: 70, fe: 40 }));
+    expect(result.type).toBe('INTJ');
+    expect(result.functionStack).toEqual(['ni', 'te', 'fi', 'se']);
+    expect(result.confidence).not.toBeNull();
+  });
+
+  it('derives INFJ from dominant Ni with higher Fe than Te', () => {
+    const result = deriveMbti(cogFns({ ni: 90, fe: 70, te: 40 }));
+    expect(result.type).toBe('INFJ');
+    expect(result.functionStack).toEqual(['ni', 'fe', 'ti', 'se']);
+  });
+
+  it('derives ESFP from dominant Se with higher Fi than Ti', () => {
+    const result = deriveMbti(cogFns({ se: 95, fi: 60, ti: 30 }));
+    expect(result.type).toBe('ESFP');
+    expect(result.functionStack).toEqual(['se', 'fi', 'te', 'ni']);
+  });
+
+  it('derives ESTP from dominant Se with higher Ti than Fi', () => {
+    const result = deriveMbti(cogFns({ se: 95, ti: 60, fi: 30 }));
+    expect(result.type).toBe('ESTP');
+    expect(result.functionStack).toEqual(['se', 'ti', 'fe', 'ni']);
+  });
+
+  it('breaks an exact auxiliary tie deterministically by lexicographically first type', () => {
+    // Dominant ni, candidates INTJ (aux te) vs INFJ (aux fe) — tie both at 50.
+    const result = deriveMbti(cogFns({ ni: 90, te: 50, fe: 50 }));
+    // 'INFJ' < 'INTJ' lexicographically
+    expect(result.type).toBe('INFJ');
+    expect(result.functionStack).toEqual(['ni', 'fe', 'ti', 'se']);
+  });
+
+  it('breaks a tie deterministically when both auxiliary candidates are entirely absent (null)', () => {
+    // Only ni has a score; but we need >=2 non-null to derive at all, so add a
+    // non-competing function (si) with a low score that isn't an auxiliary candidate
+    // for either INTJ or INFJ, leaving te/fe both unobserved (-Infinity vs -Infinity).
+    const result = deriveMbti(cogFns({ ni: 90, si: 10 }));
+    expect(result.type).toBe('INFJ');
+    expect(result.functionStack).toEqual(['ni', 'fe', 'ti', 'se']);
+  });
+
+  it('is consistent across repeated calls with identical input (deterministic)', () => {
+    const input = cogFns({ ni: 90, te: 50, fe: 50 });
+    const first = deriveMbti(input);
+    const second = deriveMbti(input);
+    expect(second).toEqual(first);
+  });
+});
+
+describe('computePersonalityProfile — profileVersion + mbti wiring', () => {
+  it('sets profileVersion 2 and includes cognitiveFunctions + mbti', () => {
+    const facets: PersonalityFacetInput[] = [
+      facet({
+        effectivePatterns: [
+          ep({ category: 'structured-planning', confidence: 90 }),
+          ep({ category: 'verification-workflow', confidence: 70 }),
+        ],
+      }),
+    ];
+    const profile = computePersonalityProfile(facets, [], '2026-W29', '__all__');
+    expect(profile.profileVersion).toBe(2);
+    expect(profile.cognitiveFunctions.map(f => f.key)).toEqual(['ni', 'ne', 'si', 'se', 'ti', 'te', 'fi', 'fe']);
+    expect(profile.mbti.type).toBe('INTJ');
+    expect(profile.mbti.functionStack).toEqual(['ni', 'te', 'fi', 'se']);
   });
 });

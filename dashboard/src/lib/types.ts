@@ -127,11 +127,34 @@ export interface PersonalityArchetype {
   growthAreas: string[];
 }
 
+export type CognitiveFunctionKey = 'ni' | 'ne' | 'si' | 'se' | 'ti' | 'te' | 'fi' | 'fe';
+
+export interface CognitiveFunctionScore {
+  key: CognitiveFunctionKey;
+  score: number | null;
+  band?: 'low' | 'moderate' | 'high';
+  sampleSize: number;
+}
+
+export type MBTIType =
+  | 'INTJ' | 'INTP' | 'ENTJ' | 'ENTP'
+  | 'INFJ' | 'INFP' | 'ENFJ' | 'ENFP'
+  | 'ISTJ' | 'ISFJ' | 'ESTJ' | 'ESFJ'
+  | 'ISTP' | 'ISFP' | 'ESTP' | 'ESFP';
+
+export interface MBTIProfile {
+  type: MBTIType | null;
+  functionStack: CognitiveFunctionKey[] | null;
+  confidence: 'low' | 'moderate' | 'high' | null;
+}
+
 export interface PersonalityProfile {
-  profileVersion: 1;
+  profileVersion: 1 | 2;
   traits: PersonalityTrait[];
   axis: PersonalityBipolarAxis;
   pace: PersonalityPace;
+  cognitiveFunctions: CognitiveFunctionScore[];
+  mbti: MBTIProfile;
   archetype?: PersonalityArchetype;
   computedAt: string;
   analysisVersion: string;
