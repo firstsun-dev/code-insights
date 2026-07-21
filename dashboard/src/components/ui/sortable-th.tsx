@@ -13,12 +13,14 @@ interface SortableThProps {
 export function SortableTh({ label, active, direction, align = 'left', onClick }: SortableThProps) {
   const Icon = active ? (direction === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
   return (
-    <th className={cn('py-3 font-medium', align === 'right' ? 'text-right' : 'text-left')}>
+    <th className={cn('font-medium', align === 'right' ? 'text-right' : 'text-left')}>
       <button
         type="button"
         onClick={onClick}
         className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
+          // Padding (rather than the th) grows the tap target to ~44px tall for mobile,
+          // with negative margin so it doesn't visually widen the column vs. a plain th.
+          'inline-flex items-center gap-1 py-3 px-2 -mx-2 hover:text-foreground transition-colors',
           align === 'right' && 'flex-row-reverse',
           active ? 'text-foreground' : 'text-muted-foreground'
         )}
