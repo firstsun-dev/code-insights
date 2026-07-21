@@ -82,6 +82,7 @@ export const PersonalityProfileSchema = z
     axis: PersonalityBipolarAxisSchema,
     pace: PersonalityPaceSchema,
     cognitiveFunctions: z.array(CognitiveFunctionScoreSchema),
+    cognitiveFunctionScoringMode: z.enum(['formula', 'llm-vote']).optional(),
     mbti: MBTIProfileSchema,
     archetype: PersonalityArchetypeSchema.optional(),
     computedAt: z.string(),
