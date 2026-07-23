@@ -42,6 +42,36 @@ describe('getModelPricing', () => {
     const pricing = getModelPricing('claude-3-5-haiku-20241022');
     expect(pricing).toEqual({ input: 0.8, output: 4 });
   });
+
+  it('returns exact match for Claude Opus 4.8', () => {
+    const pricing = getModelPricing('claude-opus-4-8');
+    expect(pricing).toEqual({ input: 5, output: 25 });
+  });
+
+  it('returns exact match for Claude Sonnet 5', () => {
+    const pricing = getModelPricing('claude-sonnet-5');
+    expect(pricing).toEqual({ input: 3, output: 15 });
+  });
+
+  it('returns exact match for Claude Fable 5', () => {
+    const pricing = getModelPricing('claude-fable-5');
+    expect(pricing).toEqual({ input: 10, output: 50 });
+  });
+
+  it('returns prefix match for a dated Opus 4.8 variant, not the older 4.x entries', () => {
+    const pricing = getModelPricing('claude-opus-4-8-20260601');
+    expect(pricing).toEqual({ input: 5, output: 25 });
+  });
+
+  it('returns updated pricing for Gemini 3.1 Pro', () => {
+    const pricing = getModelPricing('gemini-3.1-pro');
+    expect(pricing).toEqual({ input: 2, output: 12 });
+  });
+
+  it('returns updated pricing for Gemini 3 Flash, distinct from Gemini 3.5 Flash', () => {
+    expect(getModelPricing('gemini-3-flash')).toEqual({ input: 0.5, output: 3 });
+    expect(getModelPricing('gemini-3.5-flash')).toEqual({ input: 1.5, output: 9 });
+  });
 });
 
 describe('calculateCost', () => {
