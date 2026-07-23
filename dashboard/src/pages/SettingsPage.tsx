@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useLlmConfig, useSaveLlmConfig } from '@/hooks/useConfig';
 import { useUserProfile, normalizeGithubUsername } from '@/hooks/useUserProfile';
 import { useHomes, useAddHomeMutation, useRemoveHomeMutation, useSetHomeEnabledMutation } from '@/hooks/useHomes';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 import { fetchLlmModels, fetchOllamaModels, testLlmConfig } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
   User,
   HardDrive,
   Trash2,
+  UserCircle,
 } from 'lucide-react';
 
 type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'mistral' | 'llamacpp' | 'openai-compatible';
@@ -117,6 +119,7 @@ export default function SettingsPage() {
   const { data: llmConfig, isLoading: configLoading } = useLlmConfig();
   const saveMutation = useSaveLlmConfig();
   const { profile, saveProfile } = useUserProfile();
+  const { flags, setPersonalityEnabled } = useFeatureFlags();
 
   // Profile card state
   const [profileName, setProfileName] = useState(profile?.name ?? '');
@@ -515,6 +518,31 @@ export default function SettingsPage() {
               </Button>
             </div>
             {addHomeError && <p className="text-sm text-red-500">{addHomeError}</p>}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Features Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <UserCircle className="h-5 w-5" />
+            <CardTitle className="text-base">Features</CardTitle>
+          </div>
+          <CardDescription>Turn optional dashboard features on or off</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <div className="min-w-0">
+              <p className="font-medium text-sm">Personality</p>
+              <p className="text-xs text-muted-foreground">
+                Show the Personality page and nav link, which infers an MBTI-style profile from your sessions
+              </p>
+            </div>
+            <Switch
+              checked={flags.personalityEnabled}
+              onCheckedChange={setPersonalityEnabled}
+            />
           </div>
         </CardContent>
       </Card>

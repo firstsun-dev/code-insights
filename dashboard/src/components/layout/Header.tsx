@@ -26,6 +26,7 @@ import {
 import { ThemeToggle } from './ThemeToggle';
 import { Logo } from '@/components/brand/Logo';
 import { cn } from '@/lib/utils';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -48,6 +49,10 @@ interface HeaderProps {
 
 export function Header({ onOpenSearch }: HeaderProps) {
   const { pathname } = useLocation();
+  const { flags } = useFeatureFlags();
+  const navItems = flags.personalityEnabled
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => item.href !== '/personality');
 
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -82,7 +87,7 @@ export function Header({ onOpenSearch }: HeaderProps) {
                 <SheetDescription className="sr-only">Navigation menu</SheetDescription>
               </SheetHeader>
               <nav className="px-2 py-2">
-                {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => (
+                {navItems.map(({ href, label, icon: Icon, exact }) => (
                   <Button
                     key={href}
                     variant="ghost"
@@ -113,7 +118,7 @@ export function Header({ onOpenSearch }: HeaderProps) {
 
           {/* Desktop nav links — hidden below lg */}
           <nav className="hidden lg:flex items-center gap-0.5">
-            {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => (
+            {navItems.map(({ href, label, icon: Icon, exact }) => (
               <Button
                 key={href}
                 variant="ghost"
@@ -201,7 +206,7 @@ export function Header({ onOpenSearch }: HeaderProps) {
               <SheetDescription className="sr-only">Additional navigation options</SheetDescription>
             </SheetHeader>
             <nav className="px-4 pb-6 grid grid-cols-2 gap-2">
-              {NAV_ITEMS.slice(4).map(({ href, label, icon: Icon }) => (
+              {navItems.filter((item) => !BOTTOM_TABS.includes(item)).map(({ href, label, icon: Icon }) => (
                 <Button key={href} variant="outline" asChild className="justify-start gap-2">
                   <Link to={href}>
                     <Icon className="h-4 w-4" />
