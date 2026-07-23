@@ -14,6 +14,7 @@ import JournalPage from '@/pages/JournalPage';
 import PatternsPage from '@/pages/PatternsPage';
 import PersonalityPage from '@/pages/PersonalityPage';
 import ReportsPage from '@/pages/ReportsPage';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -64,6 +65,8 @@ function RouteEffects() {
 }
 
 export default function App() {
+  const { flags } = useFeatureFlags();
+
   return (
     <ErrorBoundary>
     <BrowserRouter>
@@ -77,7 +80,10 @@ export default function App() {
           <Route path="/insights" element={<InsightsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/patterns" element={<PatternsPage />} />
-          <Route path="/personality" element={<PersonalityPage />} />
+          <Route
+            path="/personality"
+            element={flags.personalityEnabled ? <PersonalityPage /> : <Navigate to="/dashboard" replace />}
+          />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/export" element={<ExportPage />} />
           <Route path="/reports" element={<ReportsPage />} />
