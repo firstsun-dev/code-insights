@@ -1,7 +1,7 @@
 /**
  * Model pricing table and cost calculation utilities.
- * Prices are USD per 1M tokens, sourced from Anthropic's pricing page.
- * Last updated: 2026-02-18
+ * Prices are USD per 1M tokens, sourced from each vendor's pricing page.
+ * Last updated: 2026-07-23
  */
 
 export interface ModelPricing {
@@ -23,6 +23,12 @@ export interface UsageEntry {
 // Cache read tokens are priced at 10% of input price (Anthropic standard)
 // Cache creation tokens are priced at 25% more than input price
 const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Claude 5.x / Fable family — longest/most-specific keys first
+  'claude-fable-5':            { input: 10,  output: 50 },
+  'claude-mythos-5':           { input: 10,  output: 50 },
+  'claude-opus-4-8':           { input: 5,   output: 25 },
+  'claude-opus-4-7':           { input: 5,   output: 25 },
+  'claude-sonnet-5':           { input: 3,   output: 15 },
   // Claude 4.x family
   'claude-opus-4-6':           { input: 5,   output: 25 },
   'claude-opus-4-5':           { input: 5,   output: 25 },
@@ -41,13 +47,23 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-3-sonnet-20240229':  { input: 3,   output: 15 },
   'claude-3-haiku-20240307':   { input: 0.25, output: 1.25 },
 
-  // Gemini family
+  // Gemini family (incl. Google Antigravity, which runs on Gemini models) —
+  // longest/most-specific keys first. Pro-tier prices are the <=200K-context
+  // tier; requests beyond that context window are billed higher by Google.
+  'gemini-3.6-flash':          { input: 1.5,  output: 7.5 },
+  'gemini-3.5-flash-lite':     { input: 0.3,  output: 2.5 },
+  'gemini-3.5-flash':          { input: 1.5,  output: 9 },
+  'gemini-3.1-flash-lite':     { input: 0.25, output: 1.5 },
+  'gemini-3.1-pro':            { input: 2,    output: 12 },
+  'gemini-3-flash':            { input: 0.5,  output: 3 },
+  'gemini-3-pro':              { input: 2,    output: 12 },
+  'gemini-2.5-flash-lite':     { input: 0.1,  output: 0.4 },
+  'gemini-2.5-flash':          { input: 0.3,  output: 2.5 },
+  'gemini-2.5-pro':            { input: 1.25, output: 10 },
   'gemini-2.0-pro':            { input: 3.5,  output: 10.5 },
   'gemini-2.0-flash':          { input: 0.1,  output: 0.4 },
   'gemini-1.5-pro':            { input: 3.5,  output: 10.5 },
   'gemini-1.5-flash':          { input: 0.075, output: 0.3 },
-  'gemini-3.1-pro':            { input: 3.5,  output: 10.5 },
-  'gemini-3.1-flash':          { input: 0.1,  output: 0.4 },
 
   // OpenAI GPT-5.x family (incl. Codex CLI models) — longest/most-specific keys first
   'gpt-5.6-luna':              { input: 1,    output: 6 },
