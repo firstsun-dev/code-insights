@@ -90,6 +90,15 @@ code-insights
 ```
 </details>
 
+<details>
+<summary><b>Docker</b></summary>
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry:
+```bash
+docker pull ghcr.io/firstsun-dev/code-insights:latest
+```
+</details>
+
 ## Usage
 
 Code Insights operates through a unified command-line interface. Use `code-insights --help` for the full command reference.
