@@ -24,8 +24,13 @@ describe('getModelPricing', () => {
   });
 
   it('returns default pricing for unknown model', () => {
-    const pricing = getModelPricing('gpt-4o-mini');
+    const pricing = getModelPricing('some-unrecognized-model-xyz');
     expect(pricing).toEqual({ input: 3, output: 15 });
+  });
+
+  it('returns exact match for a gpt-5.x codex model', () => {
+    const pricing = getModelPricing('gpt-5.6-terra');
+    expect(pricing).toEqual({ input: 2.5, output: 15 });
   });
 
   it('returns default pricing for empty string', () => {

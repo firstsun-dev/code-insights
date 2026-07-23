@@ -4,6 +4,7 @@ import * as os from 'os';
 import type { SessionProvider } from './types.js';
 import type { ParsedSession, ParsedMessage, ToolCall, ToolResult, SessionUsage, MessageUsage } from '../types.js';
 import { generateTitle, detectSessionCharacter } from '../parser/titles.js';
+import { calculateCost } from '../utils/pricing.js';
 
 /**
  * OpenAI Codex CLI session provider.
@@ -657,7 +658,14 @@ function buildSession(
     totalOutputTokens: totalOutput,
     cacheCreationTokens: 0,
     cacheReadTokens: totalCached,
-    estimatedCostUsd: 0, // Codex pricing not public
+    estimatedCostUsd: calculateCost([{
+      model: model || 'unknown',
+      usage: {
+        input_tokens: totalInput,
+        output_tokens: totalOutput,
+        cache_read_input_tokens: totalCached,
+      },
+    }]),
     modelsUsed: model ? [model] : [],
     primaryModel: model || 'unknown',
     usageSource: 'jsonl',
