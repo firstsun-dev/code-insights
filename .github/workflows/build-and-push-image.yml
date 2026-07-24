@@ -81,3 +81,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Remove superseded image versions so multi-arch builds don't fill the
+  # org's shared package/artifact storage quota. Manifest-list aware, so the
+  # child manifests of kept tags are preserved (naive "delete untagged" would
+  # break the current multi-arch image).
+  cleanup:
+    name: Cleanup old image versions
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete untagged and superseded versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          package: code-insights
+          # Keep only the newest tagged build (carries `latest` + its `sha-*`);
+          # bump this if you want rollback headroom for older commits.
+          keep-n-tagged: 1
+          delete-untagged: true
+          delete-partial-images: true
+          delete-ghost-images: true
+          validate: true
