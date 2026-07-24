@@ -395,6 +395,29 @@ describe('KiloProvider', () => {
       expect(session!.usage!.estimatedCostUsd).toBe(0.03);
     });
 
+    it('falls back to pricing.ts when Kilo recorded cost is 0 but tokens are present (e.g. local/OpenAI-compatible providers like Ollama)', async () => {
+      const db = new Database(tempDbPath, { readonly: false });
+      db.prepare(`
+        UPDATE session SET model = ?, cost = 0, tokens_input = ?, tokens_output = ?, tokens_cache_read = 0, tokens_cache_write = 0
+        WHERE id = ?
+      `).run(
+        JSON.stringify({ id: 'glm-5.2', providerID: 'openai-compatible' }),
+        1_000_000, 1_000_000,
+        'db-ses-1',
+      );
+      db.prepare(`UPDATE message SET data = ? WHERE id = ?`).run(
+        JSON.stringify({ role: 'assistant', model: { providerID: 'openai-compatible', modelID: 'glm-5.2' } }),
+        'db-msg-2',
+      );
+      db.close();
+
+      const virtualPath = `${tempDbPath}#db-ses-1`;
+      const session = await provider.parse(virtualPath);
+
+      // input: 1M * $1.4/1M = $1.40, output: 1M * $4.4/1M = $4.40 -> $5.80
+      expect(session!.usage!.estimatedCostUsd).toBe(5.8);
+    });
+
     it('handles reasoning part type in database', async () => {
       const db = new Database(tempDbPath, { readonly: false });
       db.prepare(`

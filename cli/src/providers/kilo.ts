@@ -6,6 +6,7 @@ import type { SessionProvider } from './types.js';
 import type { ParsedSession, ParsedMessage, ToolCall, ToolResult, SessionUsage } from '../types.js';
 import { getKiloDir } from '../utils/config.js';
 import { generateTitle, detectSessionCharacter } from '../parser/titles.js';
+import { calculateCost, type UsageEntry } from '../utils/pricing.js';
 
 /**
  * Kilo session provider.
@@ -289,6 +290,7 @@ export class KiloProvider implements SessionProvider {
     let cacheReadTokens = 0;
     const modelsUsed = new Set<string>();
     let totalCost = 0;
+    const usageEntries: UsageEntry[] = [];
 
     for (const msg of messages) {
       if (msg.usage) {
@@ -297,7 +299,23 @@ export class KiloProvider implements SessionProvider {
         cacheReadTokens += msg.usage.cacheReadTokens;
         totalCost += msg.usage.estimatedCostUsd;
         modelsUsed.add(msg.usage.model);
+        usageEntries.push({
+          model: msg.usage.model,
+          usage: {
+            input_tokens: msg.usage.inputTokens,
+            output_tokens: msg.usage.outputTokens,
+            cache_creation_input_tokens: msg.usage.cacheCreationTokens,
+            cache_read_input_tokens: msg.usage.cacheReadTokens,
+          },
+        });
       }
+    }
+
+    // Kilo doesn't record cost for every provider (e.g. local/OpenAI-compatible
+    // endpoints like Ollama) — its own `cost` field comes back 0 even when real
+    // token usage was recorded. Fall back to our own pricing table in that case.
+    if (totalCost === 0 && (totalInputTokens > 0 || totalOutputTokens > 0)) {
+      totalCost = calculateCost(usageEntries);
     }
 
     const primaryModel = Array.from(modelsUsed)[0] || 'unknown';
