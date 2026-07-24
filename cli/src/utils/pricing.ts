@@ -1,7 +1,15 @@
 /**
  * Model pricing table and cost calculation utilities.
  * Prices are USD per 1M tokens, sourced from each vendor's pricing page.
- * Last updated: 2026-07-23
+ * Last updated: 2026-07-24
+ *
+ * Sources for cross-checking/updating prices:
+ * - Anthropic:  https://www.anthropic.com/pricing
+ * - OpenAI:     https://openai.com/api/pricing
+ * - Google:     https://ai.google.dev/gemini-api/docs/pricing
+ * - Z.ai (GLM): https://z.ai/pricing
+ * - Aggregators (cross-vendor comparison, not authoritative on their own):
+ *   https://openrouter.ai/models, https://artificialanalysis.ai/
  */
 
 export interface ModelPricing {
