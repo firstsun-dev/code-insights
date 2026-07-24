@@ -102,6 +102,11 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'o3':                        { input: 2,    output: 8 },
   'o4-mini-deep-research':     { input: 2,    output: 8 },
   'o4-mini':                   { input: 1.1,  output: 4.4 },
+
+  // GLM family (Zhipu/Z.ai, incl. served via Ollama Cloud) — priced at
+  // Z.ai's official API rates; Ollama Cloud itself bills a flat subscription
+  // and does not publish per-token pricing.
+  'glm-5.2':                   { input: 1.4,  output: 4.4 },
 };
 
 // Default fallback pricing (sonnet-level)

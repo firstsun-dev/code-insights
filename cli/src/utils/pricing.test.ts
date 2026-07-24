@@ -72,6 +72,16 @@ describe('getModelPricing', () => {
     expect(getModelPricing('gemini-3-flash')).toEqual({ input: 0.5, output: 3 });
     expect(getModelPricing('gemini-3.5-flash')).toEqual({ input: 1.5, output: 9 });
   });
+
+  it('returns exact match for GLM 5.2 (served via Ollama Cloud, priced at Z.ai API rates)', () => {
+    const pricing = getModelPricing('glm-5.2');
+    expect(pricing).toEqual({ input: 1.4, output: 4.4 });
+  });
+
+  it('returns prefix match for a dated GLM 5.2 variant', () => {
+    const pricing = getModelPricing('glm-5.2:cloud');
+    expect(pricing).toEqual({ input: 1.4, output: 4.4 });
+  });
 });
 
 describe('calculateCost', () => {
