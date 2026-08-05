@@ -161,10 +161,10 @@ export function Header({ onOpenSearch }: HeaderProps) {
               asChild
             >
               <a
-                href="https://github.com/melagiri/code-insights"
+                href="https://github.com/firstsun-dev/code-insights"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="GitHub repository"
+                aria-label="FirstSun Code Insights repository"
               >
                 <Github className="h-4 w-4" />
                 <span className="sr-only">GitHub</span>
