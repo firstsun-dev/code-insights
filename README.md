@@ -5,29 +5,47 @@
   <p>
     <a href="https://deepwiki.com/b08x/code-insights"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     <a href="https://github.com/melagiri/code-insights/blob/master/LICENSE"><img src="https://img.shields.io/github/license/melagiri/code-insights" alt="License" /></a>
-    <a href="https://www.npmjs.com/package/@code-insights/cli"><img src="https://img.shields.io/npm/v/@code-insights/cli" alt="NPM Version" /></a>
-    <a href="https://github.com/melagiri/code-insights/actions/workflows/ci.yml"><img src="https://github.com/melagiri/code-insights/actions/workflows/ci.yml/badge.svg" alt="Build Status" /></a>
+    <a href="https://www.npmjs.com/package/@code-insights/cli"><img src="https://img.shields.io/npm/v/@code-insights/cli" alt="Upstream NPM Version" /></a>
+    <a href="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml"><img src="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml/badge.svg" alt="FirstSun Build Status" /></a>
   </p>
 </div>
 
-Code Insights is a local-first analytics platform designed to extract structured decisions, learnings, and prompt quality scores from your AI coding sessions. It surfaces cross-session patterns, friction points, and effective habits while tracking costs across multiple LLM providers—all without your data ever leaving your machine.
+Code Insights is a local-first analytics platform designed to extract structured decisions, learnings, prompt quality scores, and recurring patterns from AI coding sessions. Session data and derived insights are stored in a local SQLite database by default. Optional telemetry and user-configured remote LLM providers are the only features that may send data outside the machine.
+
+> [!NOTE]
+> **FirstSun-maintained fork**
+>
+> This repository is a maintained fork of [`melagiri/code-insights`](https://github.com/melagiri/code-insights), originally created by Srikanth Rao M. It preserves the upstream local-first foundation while extending the product with additional session providers, semantic retrieval, prompt optimization, behavioral and personality analysis, reporting workflows, and containerized deployment.
+>
+> Original authorship and license notices are retained. See [FirstSun Fork Changes](docs/FORK_CHANGES.md) for a clearer distinction between the upstream foundation and the additions maintained in this repository.
 
 ---
 
-## Features
+## Feature Lineage
 
-- **Automated Session Discovery** — Seamlessly parses history from Claude Code, Cursor, Codex CLI, and GitHub Copilot.
-- **Structural Insight Extraction** — Distills raw session logs into methodological narratives, capturing collaborative dynamics and workflow milestones using SFL-compliant analysis.
-- **Rage Loop Detection** — Heuristically identifies temporal loops and context stasis, surfaces "Sunk Cost Alerts" in the dashboard to help you break unproductive cycles.
-- **AI Fluency Scoring** — Tracks your evolution in AI collaboration through multi-dimensional prompt quality metrics anchored by hard systemic linguistics constraints.
-- **Structured Takeaways** — Extracts findings with Ideational, Interpersonal, and Textual breakdowns for deep architectural learning.
-- **Cross-Session Pattern Synthesis** — Identifies recurring friction points and effective patterns across weeks of work.
-- **Rule Generation** — Automatically exports high-signal patterns as custom rules for your `CLAUDE.md` or `.cursorrules`.
-- **Zero-Cost Local Analysis** — Native support for Ollama allows for full AI analysis using local models like Llama 3.
-- **Semantic Embeddings** — Vector-based embeddings via Ollama (`embeddinggemma:latest`, 768-dim) enable KNN similarity search over insights and messages, with sqlite-vec for fast local retrieval.
-- **Prompt Optimization (GEPA)** — Automatically evolve insight-generation prompts using multi-objective optimization (coverage, precision, actionability, brevity) powered by `@ax-llm/ax`.
-- **Vector-Based Recurring Insights** — Replaces expensive LLM-only clustering with sqlite-vec KNN + MMR deduplication; LLM is used only for theme naming (~90% token reduction).
-- **Privacy by Architecture** — Persistence is handled via a local SQLite database at `~/.code-insights/data.db`; no accounts or cloud sync required. Schema V11 adds vector table support and embedding status tracking.
+### Upstream foundation
+
+The original project provides the core platform that this fork builds on:
+
+- session discovery and parsing for Claude Code, Cursor, Codex CLI, Copilot CLI, and VS Code Copilot Chat
+- local SQLite persistence for projects, sessions, messages, insights, usage, and cost data
+- terminal analytics, a Hono API server, and a React dashboard
+- structured insight extraction, prompt-quality analysis, cross-session reflection, and rule generation
+- Claude Code hook integration and optional local analysis through Ollama
+
+### FirstSun fork additions
+
+This repository adds or substantially extends:
+
+- **Additional Session Providers** — Gemini CLI, Hermes Agent, OpenCode, Kilo, Crush, Antigravity, and Mistral Vibe integrations.
+- **Extended Behavioral Analysis** — Structural workflow narratives, rage-loop and repeated-friction detection, personality profiles, MBTI and cognitive-function views, and longitudinal trends.
+- **Semantic Retrieval** — Ollama embeddings with `sqlite-vec`, KNN similarity search, and vector-backed retrieval over insights and messages.
+- **Prompt Optimization (GEPA)** — Multi-objective optimization across coverage, precision, actionability, and brevity.
+- **Vector-Based Recurring Insights** — KNN retrieval and MMR-style deduplication before LLM theme synthesis, reducing repeated analysis work.
+- **Richer Product Workflows** — Reports, expanded filters, project and home grouping, editable metadata, analysis-cost visibility, and additional dashboard views.
+- **Expanded Provider Support** — OpenRouter, Mistral, OpenAI-compatible endpoints, and additional native agent runners.
+- **Deployment and Operations** — Docker, Docker Compose, multi-architecture GHCR images, repository CI, migrations, tests, architecture notes, and postmortems.
+- **Privacy by Architecture** — Local SQLite persistence at `~/.code-insights/data.db`, with no account or cloud-sync requirement.
 
 ## Supported AI Tools
 
@@ -63,17 +81,26 @@ Code Insights is a local-first analytics platform designed to extract structured
 
 ## Installation
 
-<details>
-<summary><b>Quick Start (npx)</b></summary>
+Choose the distribution that matches the version you intend to run:
 
-The fastest way to try Code Insights without a permanent installation:
+| Distribution | Tracks | Notes |
+|---|---|---|
+| `npx @code-insights/cli` / npm | Upstream package | May not include FirstSun-only additions listed above. |
+| `ghcr.io/firstsun-dev/code-insights:latest` | FirstSun fork | Multi-architecture container built from this repository. |
+| Source build from this repository | FirstSun fork | Best choice for development and inspecting the complete fork implementation. |
+
+<details>
+<summary><b>Upstream package: Quick Start with npx</b></summary>
+
+The fastest way to try the upstream package without a permanent installation:
+
 ```bash
 npx @code-insights/cli
 ```
 </details>
 
 <details>
-<summary><b>Global Installation (NPM)</b></summary>
+<summary><b>Upstream package: Global NPM installation</b></summary>
 
 ```bash
 npm install -g @code-insights/cli
@@ -82,20 +109,26 @@ code-insights
 </details>
 
 <details>
-<summary><b>PNPM (Recommended for development)</b></summary>
+<summary><b>FirstSun fork: Docker</b></summary>
+
+Multi-architecture images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry:
 
 ```bash
-pnpm add -g @code-insights/cli
-code-insights
+docker pull ghcr.io/firstsun-dev/code-insights:latest
 ```
 </details>
 
 <details>
-<summary><b>Docker</b></summary>
+<summary><b>FirstSun fork: Build from source</b></summary>
 
-Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry:
+Requires Node.js 20.19+ and pnpm 8+.
+
 ```bash
-docker pull ghcr.io/firstsun-dev/code-insights:latest
+git clone https://github.com/firstsun-dev/code-insights.git
+cd code-insights
+pnpm install
+pnpm build
+node cli/dist/index.js
 ```
 </details>
 
@@ -116,7 +149,7 @@ code-insights dashboard       # Launch visual analytics at localhost:7890
 
 #### Data & Synchronization
 - `sync`: Discovers and imports sessions from all supported providers.
-  - `--source [name]`: Limit sync to a specific provider (e.g., `cursor`, `claude`).
+  - `--source [name]`: Limit sync to a specific provider (for example, `cursor` or `claude`).
 - `reset`: Clears all synced data and resets the local SQLite database.
 
 #### Analysis & Insights
@@ -129,28 +162,31 @@ code-insights dashboard       # Launch visual analytics at localhost:7890
 #### Integration
 - `install-hook`: Installs an executable hook into Claude Code for zero-latency session analysis.
 - `dashboard`: Starts the Hono-based API server and serves the React frontend.
-  - `--port [num]`: Set custom server port (default: 7890).
+  - `--port [num]`: Set a custom server port (default: 7890).
 
 ### Examples
 
 **Analyze cost breakdown for the current month:**
+
 ```bash
 code-insights stats cost
 ```
 
 **Generate a rule-set for the previous week:**
+
 ```bash
 code-insights reflect --week 2026-W13
 ```
 
 **Sync only from Cursor and open the dashboard:**
+
 ```bash
 code-insights sync --source cursor && code-insights dashboard
 ```
 
 ## Embeddings & Semantic Search
 
-Vector embeddings enable KNN similarity search over your insights and messages. Requires an Ollama instance with an embedding model.
+Vector embeddings enable KNN similarity search over insights and messages. This workflow requires an Ollama instance with an embedding model.
 
 ```bash
 # Backfill pending embeddings (insights, messages, or both)
@@ -170,8 +206,8 @@ code-insights embeddings search "error handling patterns" --top-k 10
 ```
 
 **Ollama configuration:**
-- Set `OLLAMA_BASE_URL` environment variable (default: `http://tinybot:11434`)
-- Default embedding model: `embeddinggemma:latest` (768-dim)
+- Set `OLLAMA_BASE_URL` (default: `http://tinybot:11434`).
+- The default embedding model is `embeddinggemma:latest` with 768 dimensions.
 
 ## Prompt Optimization (GEPA)
 
@@ -194,17 +230,17 @@ code-insights optimize compare
 code-insights optimize delete <version-id>
 ```
 
-**Optimization objectives (scored 0-1):**
-- **Coverage** — % of session content captured in generated insights
-- **Precision** — % of insights that are non-trivial (not filler)
-- **Actionability** — % of insights with concrete, actionable takeaways
-- **Brevity** — inverse of total insight token count (normalized)
+**Optimization objectives (scored 0–1):**
+- **Coverage** — Percentage of session content captured in generated insights.
+- **Precision** — Percentage of insights that are non-trivial rather than filler.
+- **Actionability** — Percentage of insights with concrete takeaways.
+- **Brevity** — Inverse of total insight token count, normalized for comparison.
 
 **Supported providers:** `openai`, `anthropic`, `mistral`, `deepseek`, `cohere`, `google-gemini`
 
 ## Configuration File
 
-The system maintains its state and preferences in `~/.code-insights/config.json`. While most configuration is handled via the CLI, you can manually adjust settings for custom LLM providers or dashboard ports.
+The system maintains its state and preferences in `~/.code-insights/config.json`. Most configuration is handled through the CLI, but the file can also be edited directly for custom LLM providers or dashboard ports.
 
 ```json
 {
@@ -225,18 +261,20 @@ The system maintains its state and preferences in `~/.code-insights/config.json`
 ### Configuration Options
 
 - `sync.autoAnalyze`: Automatically trigger AI analysis upon session discovery (default: `true`).
-- `dashboard.llm.provider`: The primary provider for generating reflections and rules. Supports `openai`, `anthropic`, `google`, `openrouter`, and `ollama`.
-- `dashboard.llm.apiKey`: Your API key for the selected provider (stored locally).
+- `dashboard.llm.provider`: Primary provider for generating reflections and rules. Supports `openai`, `anthropic`, `google`, `openrouter`, and `ollama`.
+- `dashboard.llm.apiKey`: API key for the selected provider, stored locally.
 
 ---
 
 ## Integration Deep-Dives
 
 ### Claude Code Subscription Optimization
-For developers using Claude Code, the `install-hook` command enables a high-efficiency workflow. By injecting a post-session hook, Code Insights leverages your active Claude session context to perform analysis with zero additional API cost and zero manual effort.
+
+For developers using Claude Code, the `install-hook` command enables a high-efficiency workflow. By injecting a post-session hook, Code Insights can use the active Claude session context to perform analysis with no separate API charge and no manual trigger.
 
 ### Ollama & Local Analysis
-The platform automatically detects local Ollama instances. If a supported model (e.g., `llama3.3`) is found, Code Insights can prioritize local execution for all insight extraction and pattern synthesis—ensuring your session data never leaves your infrastructure.
+
+The platform can detect a configured local Ollama instance and use it for insight extraction and pattern synthesis. When both analysis and embeddings use local providers and telemetry is disabled, session content can remain within the local environment.
 
 ---
 
@@ -283,12 +321,18 @@ Session Sources (Claude, Cursor, Copilot, Gemini CLI, Hermes, OpenCode, Crush)
 
 ## Privacy
 
-Code Insights is built on a "local-first" philosophy. All session data, metadata, and derived insights are stored in a local SQLite database. Telemetry is limited to anonymous usage metrics and can be disabled via `code-insights telemetry disable`. LLM analysis content is sent only to your configured provider via their official SDKs.
+Code Insights follows a local-first model:
+
+- session data, metadata, and derived insights are stored in the local SQLite database
+- there is no account or built-in cloud-sync requirement
+- anonymous usage telemetry can be disabled with `code-insights telemetry disable`
+- analysis content is sent to a remote service only when the user configures a remote LLM provider
+- Ollama and other local providers can be used when content must remain within the local environment
 
 ## Contributing
 
-Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on the monorepo structure and local development setup.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the monorepo structure and local development setup. Fork-specific direction and attribution are documented in [FirstSun Fork Changes](docs/FORK_CHANGES.md).
 
 ## License
 
-MIT — Copyright (c) 2026 melagiri
+MIT. The original project copyright and license notices are retained. FirstSun fork modifications are contributed under the same license.
