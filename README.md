@@ -294,7 +294,7 @@ Session Sources (Claude, Cursor, Copilot, Gemini CLI, Hermes, OpenCode, Crush)
       │  │ Tables   │  │ Vector Tables    │ │
       │  │ projects │  │ vec_insights     │ │
       │  │ sessions │  │ vec_messages     │ │
-      │  │ messages │  │ (sqlite-vec KNN) │
+      │  │ messages │  │ (sqlite-vec KNN) │ │
       │  │ insights │  └──────────────────┘ │
       │  └──────────┘                       │
       └──────┬──────────────────────────────┘
