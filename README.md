@@ -15,9 +15,9 @@ Code Insights is a local-first analytics platform designed to extract structured
 > [!NOTE]
 > **FirstSun-maintained fork**
 >
-> This repository is a maintained fork of [`melagiri/code-insights`](https://github.com/melagiri/code-insights), originally created by Srikanth Rao M. It preserves the upstream local-first foundation while extending the product with additional session providers, semantic retrieval, prompt optimization, behavioral and personality analysis, reporting workflows, and containerized deployment.
+> This repository is a maintained fork of [`melagiri/code-insights`](https://github.com/melagiri/code-insights), originally created by Srikanth Rao M. It preserves the upstream local-first foundation and also incorporates work from multiple contributors. The maintainer-authored additions are called out separately in [Feature Lineage](#feature-lineage); other functionality remains attributed to its original commit authors.
 >
-> Original authorship and license notices are retained. See [FirstSun Fork Changes](docs/FORK_CHANGES.md) for a clearer distinction between the upstream foundation and the additions maintained in this repository.
+> Original authorship and license notices are retained. See [FirstSun Fork Changes](docs/FORK_CHANGES.md) for more detail about the fork.
 
 ---
 
@@ -35,17 +35,16 @@ The original project provides the core platform that this fork builds on:
 
 ### FirstSun fork additions
 
-This repository adds or substantially extends:
+The list below is limited to maintainer-authored commits in this fork. Features inherited from upstream or introduced by other contributors are intentionally excluded from this attribution list.
 
-- **Additional Session Providers** — Gemini CLI, Hermes Agent, OpenCode, Kilo, Crush, Antigravity, and Mistral Vibe integrations.
-- **Extended Behavioral Analysis** — Structural workflow narratives, rage-loop and repeated-friction detection, personality profiles, MBTI and cognitive-function views, and longitudinal trends.
-- **Semantic Retrieval** — Ollama embeddings with `sqlite-vec`, KNN similarity search, and vector-backed retrieval over insights and messages.
-- **Prompt Optimization (GEPA)** — Multi-objective optimization across coverage, precision, actionability, and brevity.
-- **Vector-Based Recurring Insights** — KNN retrieval and MMR-style deduplication before LLM theme synthesis, reducing repeated analysis work.
-- **Richer Product Workflows** — Reports, expanded filters, project and home grouping, editable metadata, analysis-cost visibility, and additional dashboard views.
-- **Expanded Provider Support** — OpenRouter, Mistral, OpenAI-compatible endpoints, and additional native agent runners.
-- **Deployment and Operations** — Docker, Docker Compose, multi-architecture GHCR images, repository CI, migrations, tests, architecture notes, and postmortems.
-- **Privacy by Architecture** — Local SQLite persistence at `~/.code-insights/data.db`, with no account or cloud-sync requirement.
+- **Personality Analysis** — Deterministic personality trait scoring, dedicated snapshots and API routes, dashboard radar/gauge/trend views, MBTI and eight Jungian cognitive-function views, ranked MBTI candidates, week/project navigation, and an optional LLM-vote scoring mode.
+- **Multi-Home Directory Support** — Home-directory registry and CLI management, per-home sync, homes API and settings UI, home-aware filters and reports, nested NAS/cloud-sync roots, and full-history home-aware analytics.
+- **Kilo Session Integration** — Kilo session discovery and parsing from its SQLite data, reasoning/thinking mapping, token and model capture, tests, and cost fallback when usage exists but the source records zero cost.
+- **OpenAI-Compatible Analysis Support** — Configurable OpenAI-compatible endpoints and models across CLI/dashboard/server, plus batch `insights --all` analysis.
+- **Dashboard and Reporting Workflows** — Dynamic multi-select source filters, sortable analytics tables, collapsible insight groups, home-aware work reports, cache-usage-by-provider analytics, and session/date-range workflow fixes.
+- **Analysis Reliability and Data Integrity** — Stale-analysis tracking and badges, analyzed-session status fixes, Codex/Copilot message-ID collision fixes, Codex multi-turn parsing corrections, and personality cache invalidation across schema/scoring changes.
+- **Pricing and Cost Tracking** — Added and refreshed model pricing for OpenAI/Codex, Claude, Gemini, GLM/Z.ai, plus provider-aware cache-cost reporting and pricing source documentation.
+- **API and Deployment Operations** — OpenAPI/Swagger documentation, Docker and Docker Compose deployment, periodic sync sidecar, multi-architecture GHCR publishing, stale-image cleanup, and CI/build workflow maintenance.
 
 ## Supported AI Tools
 
@@ -295,7 +294,7 @@ Session Sources (Claude, Cursor, Copilot, Gemini CLI, Hermes, OpenCode, Crush)
       │  │ Tables   │  │ Vector Tables    │ │
       │  │ projects │  │ vec_insights     │ │
       │  │ sessions │  │ vec_messages     │ │
-      │  │ messages │  │ (sqlite-vec KNN) │ │
+      │  │ messages │  │ (sqlite-vec KNN) │
       │  │ insights │  └──────────────────┘ │
       │  └──────────┘                       │
       └──────┬──────────────────────────────┘
