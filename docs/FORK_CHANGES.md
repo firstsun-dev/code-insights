@@ -1,14 +1,14 @@
-# FirstSun Fork Changes
+# Firstsun Fork Changes
 
 This repository is a maintained fork of [`melagiri/code-insights`](https://github.com/melagiri/code-insights), originally created by Srikanth Rao M.
 
 The upstream project provides the local-first foundation: session discovery for major AI coding tools, local SQLite persistence, terminal analytics, a Hono API server, a React dashboard, insight extraction, prompt-quality analysis, recurring reflection, and cost tracking.
 
-The FirstSun fork extends that foundation rather than replacing its authorship.
+The Firstsun fork extends that foundation rather than replacing its authorship.
 
 ## Major additions in this fork
 
-The current FirstSun line adds or substantially extends the following areas:
+The current Firstsun line adds or substantially extends the following areas:
 
 - additional session providers, including Gemini CLI, Hermes Agent, OpenCode, Kilo, Crush, Antigravity, and Mistral Vibe
 - semantic embeddings for insights and messages with Ollama and `sqlite-vec`
@@ -25,14 +25,14 @@ This list is intentionally high level. The Git history and repository comparison
 
 ## Distribution
 
-- The npm package `@code-insights/cli` is the upstream distribution and may not contain FirstSun-only features.
-- The image `ghcr.io/firstsun-dev/code-insights:latest` and source builds from this repository track the FirstSun fork.
+- The npm package `@code-insights/cli` is the upstream distribution and may not contain Firstsun-only features.
+- The image `ghcr.io/firstsun-dev/code-insights:latest` and source builds from this repository track the Firstsun fork.
 
 ## Attribution and maintenance
 
 - **Original project:** [`melagiri/code-insights`](https://github.com/melagiri/code-insights)
 - **Original author:** Srikanth Rao M
-- **Fork maintainer:** FirstSun / `firstsun-dev`
+- **Fork maintainer:** Firstsun Dev / `firstsun-dev`
 - **License:** MIT; original copyright and license notices are retained
 
 The fork may selectively incorporate compatible upstream changes while continuing its own product direction.
