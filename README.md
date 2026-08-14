@@ -6,18 +6,18 @@
     <a href="https://deepwiki.com/b08x/code-insights"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     <a href="https://github.com/melagiri/code-insights/blob/master/LICENSE"><img src="https://img.shields.io/github/license/melagiri/code-insights" alt="License" /></a>
     <a href="https://www.npmjs.com/package/@code-insights/cli"><img src="https://img.shields.io/npm/v/@code-insights/cli" alt="Upstream NPM Version" /></a>
-    <a href="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml"><img src="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml/badge.svg" alt="FirstSun Build Status" /></a>
+    <a href="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml"><img src="https://github.com/firstsun-dev/code-insights/actions/workflows/build-and-push-image.yml/badge.svg" alt="Firstsun Build Status" /></a>
   </p>
 </div>
 
 Code Insights is a local-first analytics platform designed to extract structured decisions, learnings, prompt quality scores, and recurring patterns from AI coding sessions. Session data and derived insights are stored in a local SQLite database by default. Optional telemetry and user-configured remote LLM providers are the only features that may send data outside the machine.
 
 > [!NOTE]
-> **FirstSun-maintained fork**
+> **Firstsun-maintained fork**
 >
 > This repository is a maintained fork of [`melagiri/code-insights`](https://github.com/melagiri/code-insights), originally created by Srikanth Rao M. It preserves the upstream local-first foundation and also incorporates work from multiple contributors. The maintainer-authored additions are called out separately in [Feature Lineage](#feature-lineage); other functionality remains attributed to its original commit authors.
 >
-> Original authorship and license notices are retained. See [FirstSun Fork Changes](docs/FORK_CHANGES.md) for more detail about the fork.
+> Original authorship and license notices are retained. See [Firstsun Fork Changes](docs/FORK_CHANGES.md) for more detail about the fork.
 
 ---
 
@@ -33,7 +33,7 @@ The original project provides the core platform that this fork builds on:
 - structured insight extraction, prompt-quality analysis, cross-session reflection, and rule generation
 - Claude Code hook integration and optional local analysis through Ollama
 
-### FirstSun fork additions
+### Firstsun fork additions
 
 The list below is limited to maintainer-authored commits in this fork. Features inherited from upstream or introduced by other contributors are intentionally excluded from this attribution list.
 
@@ -84,9 +84,9 @@ Choose the distribution that matches the version you intend to run:
 
 | Distribution | Tracks | Notes |
 |---|---|---|
-| `npx @code-insights/cli` / npm | Upstream package | May not include FirstSun-only additions listed above. |
-| `ghcr.io/firstsun-dev/code-insights:latest` | FirstSun fork | Multi-architecture container built from this repository. |
-| Source build from this repository | FirstSun fork | Best choice for development and inspecting the complete fork implementation. |
+| `npx @code-insights/cli` / npm | Upstream package | May not include Firstsun-only additions listed above. |
+| `ghcr.io/firstsun-dev/code-insights:latest` | Firstsun fork | Multi-architecture container built from this repository. |
+| Source build from this repository | Firstsun fork | Best choice for development and inspecting the complete fork implementation. |
 
 <details>
 <summary><b>Upstream package: Quick Start with npx</b></summary>
@@ -108,7 +108,7 @@ code-insights
 </details>
 
 <details>
-<summary><b>FirstSun fork: Docker</b></summary>
+<summary><b>Firstsun fork: Docker</b></summary>
 
 Multi-architecture images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry:
 
@@ -118,7 +118,7 @@ docker pull ghcr.io/firstsun-dev/code-insights:latest
 </details>
 
 <details>
-<summary><b>FirstSun fork: Build from source</b></summary>
+<summary><b>Firstsun fork: Build from source</b></summary>
 
 Requires Node.js 20.19+ and pnpm 8+.
 
@@ -330,8 +330,8 @@ Code Insights follows a local-first model:
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the monorepo structure and local development setup. Fork-specific direction and attribution are documented in [FirstSun Fork Changes](docs/FORK_CHANGES.md).
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the monorepo structure and local development setup. Fork-specific direction and attribution are documented in [Firstsun Fork Changes](docs/FORK_CHANGES.md).
 
 ## License
 
-MIT. The original project copyright and license notices are retained. FirstSun fork modifications are contributed under the same license.
+MIT. The original project copyright and license notices are retained. Firstsun fork modifications are contributed under the same license.
