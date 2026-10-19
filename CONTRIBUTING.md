@@ -4,8 +4,8 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 ## Prerequisites
 
-- **Node.js** 18 or later
-- **pnpm** >= 9
+- **Node.js** 24 or later
+- **pnpm** 12.14.0 (pinned via `packageManager`)
 
 ## Getting Started
 

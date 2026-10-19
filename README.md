@@ -120,7 +120,7 @@ docker pull ghcr.io/firstsun-dev/code-insights:latest
 <details>
 <summary><b>Firstsun fork: Build from source</b></summary>
 
-Requires Node.js 20.19+ and pnpm 8+.
+Requires Node.js 20.19+ to run the published CLI; developing from source requires Node.js 24+ and pnpm 12.14.0.
 
 ```bash
 git clone https://github.com/firstsun-dev/code-insights.git
