@@ -5,18 +5,17 @@
 # + symlinks) has to stay intact between build and runtime — we copy the whole
 # pruned workspace rather than trying to hand-pick individual node_modules dirs.
 
-FROM node:22-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 # python3/make/g++ are required to build better-sqlite3 and sqlite-vec (native
 # addons) for the container's arch/libc — do not switch the runtime stage to
 # an Alpine base without rebuilding here, musl bindings are not compatible.
-# corepack's "latest pnpm" fetch needs Node >=22.13 (hence the base bump from
-# the repo's engines.node >=18 floor) — pin to the pnpm version this repo was
-# authored against so builds don't silently drift to a newer major.
+# Pin pnpm to the exact version in package.json#packageManager so builds
+# don't silently drift to a newer major.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
-    && corepack prepare pnpm@10.33.0 --activate
+    && corepack prepare pnpm@12.14.0 --activate
 WORKDIR /app
 
 FROM base AS builder
@@ -42,7 +41,7 @@ FROM base AS runtime
 ENV NODE_ENV=production
 RUN apt-get purge -y python3 make g++ && apt-get autoremove -y
 
-# node:22-bookworm-slim already ships a "node" user at uid/gid 1000 — reuse it
+# node:24-bookworm-slim already ships a "node" user at uid/gid 1000 — reuse it
 # rather than creating a new one (a fresh uid 1000 would collide with it).
 # Override at `docker run`/compose time with `user: "${UID}:${GID}"` to match
 # the host user that owns the bind-mounted home directory, otherwise writes to
