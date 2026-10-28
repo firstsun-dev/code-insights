@@ -25,14 +25,37 @@ describe('detectRageLoopHeuristic', () => {
       mockMessage('5', '2026-04-24T10:00:40Z', JSON.stringify({ inputTokens: 150000 })),
     ];
 
-    // Add semantic repetition
-    messages[3].content = 'repeat content';
-    messages[4].content = 'repeat content';
+    // Repeat a substantive failure; empty [] tool-call fields are not evidence.
+    messages[2].content = 'Timeout when deploying exactly the same revision';
+    messages[3].content = 'Timeout when deploying exactly the same revision';
+    messages[4].content = 'Timeout when deploying exactly the same revision';
 
     const result = detectRageLoopHeuristic(messages);
     expect(result.detected).toBe(true);
     expect(result.reasoning).toContain('static token count (150k)');
     expect(result.turnRange).toEqual(['Turn#0', 'Turn#4']);
+  });
+
+  it('does not classify empty tool calls and short, generic responses as a rage loop', () => {
+    const messages = Array.from({ length: 5 }, (_, i) =>
+      mockMessage(String(i), `2026-04-24T10:00:${String(i * 10).padStart(2, '0')}Z`, JSON.stringify({ inputTokens: 150000 }), 'OK')
+    );
+    expect(detectRageLoopHeuristic(messages).detected).toBe(false);
+  });
+
+  it('does not treat out-of-order timestamps as a rapid loop', () => {
+    const messages = Array.from({ length: 5 }, (_, i) =>
+      mockMessage(String(i), `2026-04-24T10:00:${String(i * 10).padStart(2, '0')}Z`, JSON.stringify({ inputTokens: 150000 }), 'Timeout when deploying exactly the same revision')
+    );
+    messages[2].timestamp = '2026-04-24T09:00:00Z';
+    expect(detectRageLoopHeuristic(messages).detected).toBe(false);
+  });
+
+  it('classifies repeated low-context errors separately from rage loops', () => {
+    const messages = Array.from({ length: 5 }, (_, i) =>
+      mockMessage(String(i), `2026-04-24T10:00:${String(i * 10).padStart(2, '0')}Z`, JSON.stringify({ inputTokens: 8000 }), 'Timeout when deploying exactly the same revision')
+    );
+    expect(detectRageLoopHeuristic(messages).detected).toBe(false);
   });
 
   it('should not detect a loop if token count is growing', () => {
