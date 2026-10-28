@@ -33,7 +33,7 @@ export function loadSessionForAnalysis(db: ReturnType<typeof getDb>, sessionId: 
 export function loadSessionMessages(db: ReturnType<typeof getDb>, sessionId: string): SQLiteMessageRow[] {
   return db.prepare(`
     SELECT id, session_id, type, content, thinking, tool_calls, tool_results, usage, timestamp, parent_id
-    FROM messages WHERE session_id = ? ORDER BY timestamp ASC
+    FROM messages WHERE session_id = ? ORDER BY timestamp ASC, rowid ASC
   `).all(sessionId) as SQLiteMessageRow[];
 }
 
