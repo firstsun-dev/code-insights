@@ -1,5 +1,7 @@
 import type { SessionProvider } from './types.js';
 import { ClaudeCodeProvider } from './claude-code.js';
+import { ClaudeDesktopProvider } from './claude-desktop.js';
+import { PiProvider } from './pi.js';
 import { CursorProvider } from './cursor.js';
 import { CodexProvider } from './codex.js';
 import { CopilotCliProvider } from './copilot-cli.js';
@@ -12,6 +14,11 @@ import { AntigravityProvider } from './antigravity.js';
 import { MistralVibeProvider } from './mistral-vibe.js';
 
 const providers = new Map<string, SessionProvider>();
+const MANUAL_ONLY_PROVIDERS = new Set(['claude-desktop', 'pi']);
+
+// New sources are opt-in: available with --source, but not scanned by plain sync.
+providers.set('claude-desktop', new ClaudeDesktopProvider());
+providers.set('pi', new PiProvider());
 
 // Register built-in providers
 const claudeCode = new ClaudeCodeProvider();
@@ -61,6 +68,8 @@ export function getProvider(name: string): SessionProvider {
 /**
  * Get all registered providers
  */
-export function getAllProviders(): SessionProvider[] {
-  return [...providers.values()];
+export function getAllProviders(includeManual = false): SessionProvider[] {
+  return [...providers.values()].filter(provider =>
+    includeManual || !MANUAL_ONLY_PROVIDERS.has(provider.getProviderName())
+  );
 }
