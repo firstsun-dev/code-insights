@@ -145,6 +145,9 @@
           "situation": { "type": "string" },
           "choice": { "type": "string" },
           "reasoning": { "type": "string" },
+          "decided_by": { "type": "string", "enum": ["user", "agent", "collaborative", "unknown"] },
+          "intent": { "type": "string" },
+          "branch_point": { "type": "string" },
           "alternatives": {
             "type": "array",
             "items": {

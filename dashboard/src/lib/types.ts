@@ -282,6 +282,9 @@ export interface InsightMetadata {
   trade_offs?: string;
   revisit_when?: string;
   evidence?: string[];
+  decided_by?: 'user' | 'agent' | 'collaborative' | 'unknown';
+  intent?: string;
+  branch_point?: string;
   // Learning fields
   symptom?: string;
   root_cause?: string;

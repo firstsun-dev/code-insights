@@ -88,12 +88,17 @@ export function formatAlternatives(alternatives: InsightMetadata['alternatives']
 export function DecisionContent({ metadata }: { metadata: InsightMetadata }) {
   const hasStructured = metadata.situation || metadata.choice || metadata.reasoning;
   if (!hasStructured) return null;
+  const agencyLabels = { user: 'User decision', agent: 'Agent decision', collaborative: 'Collaborative decision', unknown: 'Agency unverified' } as const;
+  const agency = metadata.decided_by && agencyLabels[metadata.decided_by];
 
   return (
     <div className="space-y-2.5">
+      {agency && <Badge variant="outline" className="text-xs">{agency}</Badge>}
       {metadata.situation && <MetadataSection label="Situation">{metadata.situation}</MetadataSection>}
       {metadata.choice && <MetadataSection label="Choice" prominent>{metadata.choice}</MetadataSection>}
       {metadata.reasoning && <MetadataSection label="Reasoning">{metadata.reasoning}</MetadataSection>}
+      {metadata.intent && <MetadataSection label="Intent">{metadata.intent}</MetadataSection>}
+      {metadata.branch_point && <MetadataSection label="Branch Point">{metadata.branch_point}</MetadataSection>}
       {metadata.alternatives && metadata.alternatives.length > 0 && (
         <div className="space-y-0.5">
           <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">

@@ -78,6 +78,10 @@ export interface AnalysisResponse {
     revisit_when?: string;
     confidence?: number;
     evidence?: string[];
+    /** Agency evidenced by actual turn references. */
+    decided_by?: 'user' | 'agent' | 'collaborative' | 'unknown';
+    intent?: string;
+    branch_point?: string;
   }>;
   learnings: Array<{
     title: string;

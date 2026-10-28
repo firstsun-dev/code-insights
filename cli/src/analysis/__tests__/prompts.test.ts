@@ -407,6 +407,15 @@ describe('buildSessionAnalysisInstructions', () => {
     expect(result).toContain('<output_schema>');
   });
 
+  it('requires agency grounded in explicit zero-based turn evidence', () => {
+    const prompt = buildSessionAnalysisInstructions('proj', null);
+    expect(prompt).toContain('decision_attribution name="decided_by"');
+    expect(prompt).toContain('"decided_by": "user | agent | collaborative | unknown"');
+    expect(prompt).toContain('Role-specific turn numbering starts at 0');
+    expect(prompt).toContain('never fabricate citations');
+    expect(prompt).toContain('never infer collaboration');
+  });
+
   it('ends with json tags instruction', () => {
     const result = buildSessionAnalysisInstructions('proj', null);
     expect(result).toContain('<json>...</json>');
