@@ -122,6 +122,13 @@ export function fetchMessages(sessionId: string, params?: { limit?: number; offs
   return request<{ messages: Message[] }>(`/messages/${sessionId}${qs}`);
 }
 
+/** Backend resolver uses the same zero-based User/Assistant numbering as the LLM prompt. */
+export function fetchTurnCitation(sessionId: string, role: 'User' | 'Assistant', index: number) {
+  return request<{ messageId: string; offset: number; ref: string }>(
+    `/messages/${encodeURIComponent(sessionId)}/citation/${role}/${index}`
+  );
+}
+
 // ── Insights ──────────────────────────────────────────────────────────────────
 
 export function fetchInsights(params?: {

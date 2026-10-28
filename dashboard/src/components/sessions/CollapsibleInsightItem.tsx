@@ -7,7 +7,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 
 /** Per-item collapsible for learnings and decisions. Compact row with
  *  expand toggle to reveal full structured metadata. */
-export function CollapsibleInsightItem({ insight }: { insight: Insight }) {
+export function CollapsibleInsightItem({ insight, onTurnClick }: { insight: Insight; onTurnClick?: (ref: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const metadata = parseJsonField<InsightMetadata>(insight.metadata, {});
 
@@ -44,9 +44,9 @@ export function CollapsibleInsightItem({ insight }: { insight: Insight }) {
           insight.type === 'decision' ? 'border-blue-500/40' : 'border-green-500/40'
         )}>
           {insight.type === 'decision' ? (
-            <DecisionContent metadata={metadata} />
+            <DecisionContent metadata={metadata} onTurnClick={onTurnClick} />
           ) : (
-            <LearningContent metadata={metadata} />
+            <LearningContent metadata={metadata} onTurnClick={onTurnClick} />
           )}
         </div>
       )}

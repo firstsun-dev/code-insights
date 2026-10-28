@@ -83,9 +83,31 @@ export function formatAlternatives(alternatives: InsightMetadata['alternatives']
   }).join('; ');
 }
 
+/** Render legacy evidence as text and canonical role refs as optional jump links. */
+export function EvidenceCitations({ evidence, onTurnClick }: {
+  evidence: string[];
+  onTurnClick?: (ref: string) => void;
+}) {
+  return (
+    <span className="inline-flex flex-wrap gap-x-2 gap-y-1">
+      {evidence.map((item, i) => {
+        const match = typeof item === 'string'
+          ? /^(User|Assistant)#(0|[1-9][0-9]*)(?::(?:\\s|$).*)?$/.exec(item.trim())
+          : null;
+        const ref = match ? `${match[1]}#${match[2]}` : null;
+        return ref && onTurnClick ? (
+          <button key={i} type="button" onClick={() => onTurnClick(ref)}
+            className="text-primary hover:underline underline-offset-2 text-left"
+            title={`Open ${ref} in conversation`}>{item}</button>
+        ) : <span key={i}>{item}</span>;
+      })}
+    </span>
+  );
+}
+
 // --- Type-specific content components ---
 
-export function DecisionContent({ metadata }: { metadata: InsightMetadata }) {
+export function DecisionContent({ metadata, onTurnClick }: { metadata: InsightMetadata; onTurnClick?: (ref: string) => void }) {
   const hasStructured = metadata.situation || metadata.choice || metadata.reasoning;
   if (!hasStructured) return null;
   const agencyLabels = { user: 'User decision', agent: 'Agent decision', collaborative: 'Collaborative decision', unknown: 'Agency unverified' } as const;
@@ -124,13 +146,13 @@ export function DecisionContent({ metadata }: { metadata: InsightMetadata }) {
         <MetadataSection label="Revisit When">{metadata.revisit_when}</MetadataSection>
       )}
       {metadata.evidence && metadata.evidence.length > 0 && (
-        <MetadataSection label="Evidence">{metadata.evidence.join(', ')}</MetadataSection>
+        <MetadataSection label="Evidence"><EvidenceCitations evidence={metadata.evidence} onTurnClick={onTurnClick} /></MetadataSection>
       )}
     </div>
   );
 }
 
-export function LearningContent({ metadata }: { metadata: InsightMetadata }) {
+export function LearningContent({ metadata, onTurnClick }: { metadata: InsightMetadata; onTurnClick?: (ref: string) => void }) {
   const hasStructured = metadata.symptom || metadata.root_cause || metadata.takeaway;
   if (!hasStructured) return null;
 
@@ -140,6 +162,9 @@ export function LearningContent({ metadata }: { metadata: InsightMetadata }) {
       {metadata.root_cause && <MetadataSection label="Why">{metadata.root_cause}</MetadataSection>}
       {metadata.takeaway && <MetadataSection label="Takeaway" prominent>{metadata.takeaway}</MetadataSection>}
       {metadata.applies_when && <MetadataSection label="Applies When">{metadata.applies_when}</MetadataSection>}
+      {metadata.evidence && metadata.evidence.length > 0 && (
+        <MetadataSection label="Evidence"><EvidenceCitations evidence={metadata.evidence} onTurnClick={onTurnClick} /></MetadataSection>
+      )}
     </div>
   );
 }
