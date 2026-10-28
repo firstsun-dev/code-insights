@@ -92,7 +92,7 @@ export function EvidenceCitations({ evidence, onTurnClick }: {
     <span className="inline-flex flex-wrap gap-x-2 gap-y-1">
       {evidence.map((item, i) => {
         const match = typeof item === 'string'
-          ? /^(User|Assistant)#(0|[1-9][0-9]*)(?::(?:\\s|$).*)?$/.exec(item.trim())
+          ? /^(User|Assistant)#(0|[1-9][0-9]*)(?::\s+.*)?$/.exec(item.trim())
           : null;
         const ref = match ? `${match[1]}#${match[2]}` : null;
         return ref && onTurnClick ? (
