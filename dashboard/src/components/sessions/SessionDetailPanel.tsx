@@ -10,7 +10,7 @@ import {
 import { SESSION_CHARACTER_COLORS, SESSION_CHARACTER_LABELS, SOURCE_TOOL_COLORS, OUTCOME_DOT } from '@/lib/constants/colors';
 import { parseJsonField } from '@/lib/types';
 import { getScoreTier, extractPQScore } from '@/lib/score-utils';
-import type { Insight, InsightMetadata, Session } from '@/lib/types';
+import type { Insight, InsightMetadata, Session, Message } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { ErrorCard } from '@/components/ErrorCard';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ import { AnalyzeDropdown } from '@/components/analysis/AnalyzeDropdown';
 import { AnalyzeButton } from '@/components/analysis/AnalyzeButton';
 import { useAnalysis } from '@/components/analysis/AnalysisContext';
 import { useMissingFacets, useBackfillFacets } from '@/hooks/useFacets';
-import { ExportGenerateRequest, exportGenerateStream } from '@/lib/api';
+import { ExportGenerateRequest, exportGenerateStream, fetchMessages, fetchTurnCitation } from '@/lib/api';
 import { exportSession } from '@/lib/export-session';
 import { CollapsibleInsightItem } from '@/components/sessions/CollapsibleInsightItem';
 import { PromptQualityAnalyzeButton } from '@/components/sessions/PromptQualityAnalyzeButton';
@@ -81,6 +81,9 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
   const [searchHighlightId, setSearchHighlightId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingAllMessages, setLoadingAllMessages] = useState(false);
+  const [activeTab, setActiveTab] = useState('insights');
+  const [citationWindow, setCitationWindow] = useState<Message[] | null>(null);
+  const [citationHighlightId, setCitationHighlightId] = useState<string | null>(null);
   const { getAnalysisState } = useAnalysis();
   // Show cost indicator when either analysis type is actively running
   const sessionAnalysisState = getAnalysisState(sessionId, 'session');
@@ -127,6 +130,26 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
     }
     setLoadingAllMessages(false);
   }, [messagesQuery, loadingAllMessages]);
+
+  const openTurnCitation = useCallback(async (ref: string) => {
+    const parsed = /^(User|Assistant)#(0|[1-9][0-9]*)$/.exec(ref);
+    if (!parsed) return;
+    try {
+      const role = parsed[1] as 'User' | 'Assistant';
+      const resolved = await fetchTurnCitation(sessionId, role, Number(parsed[2]));
+      // Jump directly to a single page near the cited message, not all history.
+      const offset = Math.floor(resolved.offset / 50) * 50;
+      const page = await fetchMessages(sessionId, { limit: 50, offset });
+      if (!page.messages.some(m => m.id === resolved.messageId)) {
+        throw new Error('The cited message changed during loading.');
+      }
+      setCitationWindow(page.messages);
+      setCitationHighlightId(resolved.messageId);
+      setActiveTab('conversation');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to resolve citation');
+    }
+  }, [sessionId]);
 
   const prLinks = useMemo(() => {
     const linkSet = new Set<string>();
@@ -397,7 +420,7 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
       </div>
 
       {/* Tabs: Insights | Prompt Quality | Conversation */}
-      <Tabs defaultValue="insights" className="flex flex-col flex-1 overflow-hidden pt-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden pt-2">
         <TabsList variant="line" className="shrink-0 w-full justify-start gap-4 px-6 border-b">
           <TabsTrigger value="insights" className="px-0">
             Insights{nonPromptInsights.length > 0 && ` (${nonPromptInsights.length})`}
@@ -567,7 +590,7 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
                     </div>
                     <div className="rounded-md border">
                       {learningInsights.map((insight) => (
-                        <CollapsibleInsightItem key={insight.id} insight={insight} />
+                        <CollapsibleInsightItem key={insight.id} insight={insight} onTurnClick={openTurnCitation} />
                       ))}
                     </div>
                   </div>
@@ -588,7 +611,7 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
                     </div>
                     <div className="rounded-md border">
                       {decisionInsights.map((insight) => (
-                        <CollapsibleInsightItem key={insight.id} insight={insight} />
+                        <CollapsibleInsightItem key={insight.id} insight={insight} onTurnClick={openTurnCitation} />
                       ))}
                     </div>
                   </div>
@@ -623,23 +646,32 @@ export function SessionDetailPanel({ sessionId, onDelete }: SessionDetailPanelPr
           value="conversation"
           className="flex flex-col flex-1 overflow-hidden mt-0 bg-muted/40 dark:bg-muted/20"
         >
-          <ConversationSearch
+          {citationWindow && (
+            <div className="flex items-center justify-between gap-3 border-b bg-primary/5 px-4 py-2 text-xs">
+              <span>Showing the cited conversation page</span>
+              <Button size="sm" variant="outline" onClick={() => {
+                setCitationWindow(null);
+                setCitationHighlightId(null);
+              }}>Show full conversation</Button>
+            </div>
+          )}
+          {!citationWindow && <ConversationSearch
             messages={messages}
             onHighlightMessage={setSearchHighlightId}
             onSearchQueryChange={setSearchQuery}
             fetchAllMessages={fetchAllMessages}
             isLoadingAll={loadingAllMessages}
-          />
+          />}
           <div className="flex-1 overflow-y-auto">
             <ChatConversation
-              messages={messages}
-              loading={loadingMessages}
-              loadingMore={loadingMore}
-              hasMore={hasMore}
-              onLoadMore={() => messagesQuery.fetchNextPage()}
+              messages={citationWindow ?? messages}
+              loading={citationWindow ? false : loadingMessages}
+              loadingMore={citationWindow ? false : loadingMore}
+              hasMore={citationWindow ? false : hasMore}
+              onLoadMore={citationWindow ? undefined : () => messagesQuery.fetchNextPage()}
               sourceTool={session.source_tool ?? undefined}
-              highlightMessageId={searchHighlightId}
-              searchQuery={searchQuery}
+              highlightMessageId={citationWindow ? citationHighlightId : searchHighlightId}
+              searchQuery={citationWindow ? undefined : searchQuery}
             />
           </div>
         </TabsContent>

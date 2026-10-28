@@ -125,15 +125,17 @@ ${sessionSummary ? `  <session_summary>${sessionSummary}</session_summary>\n` : 
 <rules>
   1. Enforce strict JSON output schema.
   2. Extract insights containing ONLY concrete references (file paths, endpoints, variables, errors). Filter out generic findings automatically.
-  3. Include 1-3 literal quote citations per insight referencing turn labels (e.g., "User#5").
+  3. Include 1-3 literal quote citations per insight referencing actual transcript turns (e.g., "User#0" or "Assistant#2"). Role-specific turn numbering starts at 0; never fabricate citations.
   4. Require a minimum confidence score of 70 for any decision or learning. Drop insights below this threshold.
   5. Return empty arrays for categories yielding no valid findings.
   6. Fill every field in the schema. Use null for unavailable data where permitted.
+  7. Attribute each decision to who actually selected the choice: user, agent, collaborative, or unknown. Ground decided_by in cited turn evidence; never infer collaboration merely because both parties spoke.
 </rules>
 
 <definitions>
   <facet name="outcome_satisfaction">high | medium | low | abandoned</facet>
   <facet name="workflow_pattern">plan-then-implement | iterative-refinement | debug-fix-verify | explore-then-build | direct-execution | null</facet>
+  <decision_attribution name="decided_by">user: explicit user choice | agent: autonomous AI choice | collaborative: jointly explored and agreed choice | unknown: insufficient or contradictory turn evidence</decision_attribution>
 </definitions>
 
 ${FRICTION_CLASSIFICATION_GUIDANCE}
@@ -181,6 +183,9 @@ ${EFFECTIVE_PATTERN_CLASSIFICATION_GUIDANCE}
       "situation": "Problem context",
       "choice": "Chosen implementation",
       "reasoning": "Decision factors",
+      "decided_by": "user | agent | collaborative | unknown",
+      "intent": "Why the chosen approach was needed",
+      "branch_point": "Alternative path or design explicitly rejected",
       "alternatives": [{"option": "Name", "rejected_because": "Reason"}],
       "trade_offs": "Accepted downsides",
       "revisit_when": "Reconsideration conditions",

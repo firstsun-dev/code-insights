@@ -128,8 +128,8 @@ const PQ_RESPONSE: PromptQualityResponse = {
 // ── ANALYSIS_VERSION ──────────────────────────────────────────────────────────
 
 describe('ANALYSIS_VERSION', () => {
-  it('is 3.0.0', () => {
-    expect(ANALYSIS_VERSION).toBe('3.0.0');
+  it('is 3.1.0', () => {
+    expect(ANALYSIS_VERSION).toBe('3.1.0');
   });
 });
 
@@ -156,6 +156,26 @@ describe('convertToInsightRows', () => {
     expect(decision!.title).toBe('Use JWT over sessions');
     expect(decision!.content).toContain('Needed stateless auth');
     expect(decision!.confidence).toBeCloseTo(0.85);
+  });
+
+  it('persists user decision agency and explicit intent/branch point', () => {
+    const response: AnalysisResponse = { ...ANALYSIS_RESPONSE, decisions: [
+      { ...ANALYSIS_RESPONSE.decisions[0], decided_by: 'user', intent: 'Stateless authentication', branch_point: 'Session cookies' },
+    ] };
+    const row = convertToInsightRows(response, SESSION).find(r => r.type === 'decision');
+    expect(JSON.parse(row!.metadata!)).toMatchObject({
+      decided_by: 'user', intent: 'Stateless authentication', branch_point: 'Session cookies',
+    });
+  });
+
+  it('marks missing or invalid agency unknown rather than collaborative', () => {
+    const absent = convertToInsightRows(ANALYSIS_RESPONSE, SESSION).find(r => r.type === 'decision');
+    expect(JSON.parse(absent!.metadata!).decided_by).toBe('unknown');
+    const bad = { ...ANALYSIS_RESPONSE, decisions: [
+      { ...ANALYSIS_RESPONSE.decisions[0], decided_by: 'invalid' },
+    ] } as unknown as AnalysisResponse;
+    const result = convertToInsightRows(bad, SESSION).find(r => r.type === 'decision');
+    expect(JSON.parse(result!.metadata!).decided_by).toBe('unknown');
   });
 
   it('skips decisions with confidence < 70', () => {
@@ -271,8 +291,8 @@ describe('saveFacetsToDb analysisVersion parameter', () => {
     expect(row.analysis_version).toBe('2.5.0');
   });
 
-  it('default ANALYSIS_VERSION constant is 3.0.0', () => {
+  it('default ANALYSIS_VERSION constant is 3.1.0', () => {
     // Verifies the constant that will be used as the default
-    expect(ANALYSIS_VERSION).toBe('3.0.0');
+    expect(ANALYSIS_VERSION).toBe('3.1.0');
   });
 });

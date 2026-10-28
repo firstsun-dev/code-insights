@@ -9,7 +9,7 @@ import type { AnalysisResponse, PromptQualityResponse } from './prompt-types.js'
 import { normalizePatternCategory } from './pattern-normalize.js';
 import { normalizePromptQualityCategory } from './prompt-quality-normalize.js';
 
-export const ANALYSIS_VERSION = '3.0.0';
+export const ANALYSIS_VERSION = '3.1.0';
 
 // Shape of a saved insight row (matches the SQLite schema)
 export interface InsightRow {
@@ -109,6 +109,12 @@ export function convertToInsightRows(response: AnalysisResponse, session: Sessio
         trade_offs: decision.trade_offs,
         revisit_when: decision.revisit_when,
         evidence: decision.evidence,
+        // Do not claim collaboration when older analyses lack explicit provenance.
+        decided_by: ['user', 'agent', 'collaborative'].includes(decision.decided_by ?? '')
+          ? decision.decided_by
+          : 'unknown',
+        intent: typeof decision.intent === 'string' ? decision.intent : undefined,
+        branch_point: typeof decision.branch_point === 'string' ? decision.branch_point : undefined,
       }),
       timestamp: session.ended_at,
       created_at: now,
