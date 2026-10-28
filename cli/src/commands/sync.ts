@@ -103,7 +103,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncResult> {
     try {
       providers = [getProvider(options.source)];
     } catch {
-      throw new Error(`Unknown source: ${options.source}. Available: ${getAllProviders().map(p => p.getProviderName()).join(', ')}`);
+      throw new Error(`Unknown source: ${options.source}. Available: ${getAllProviders(true).map(p => p.getProviderName()).join(', ')}`);
     }
   } else {
     providers = getAllProviders();

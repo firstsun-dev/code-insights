@@ -122,7 +122,7 @@ export function classifyUserMessage(msg: ClaudeMessage): UserMessageClass {
 /**
  * Parse a single JSONL file and extract session data
  */
-export async function parseJsonlFile(filePath: string): Promise<ParsedSession | null> {
+export async function parseJsonlFile(filePath: string, sessionIdOverride?: string): Promise<ParsedSession | null> {
   const entries: JsonlEntry[] = [];
 
   const fileStream = fs.createReadStream(filePath);
@@ -147,15 +147,15 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedSession | 
     return null;
   }
 
-  return buildSession(filePath, entries);
+  return buildSession(filePath, entries, sessionIdOverride);
 }
 
 /**
  * Build a ParsedSession from JSONL entries
  */
-function buildSession(filePath: string, entries: JsonlEntry[]): ParsedSession | null {
-  // Extract session ID from filename
-  const sessionId = extractSessionId(filePath);
+function buildSession(filePath: string, entries: JsonlEntry[], sessionIdOverride?: string): ParsedSession | null {
+  // Special providers may use audit.jsonl: provide a stable namespaced ID.
+  const sessionId = sessionIdOverride ?? extractSessionId(filePath);
   if (!sessionId) return null;
 
   // Find summary entries
