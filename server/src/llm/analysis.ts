@@ -44,6 +44,7 @@ import {
 import { calculateAnalysisCost } from './analysis-pricing.js';
 import { saveAnalysisUsage } from './analysis-usage-db.js';
 import { getDb } from '@code-insights/cli/db/client';
+import { detectRageLoopHeuristic } from '@code-insights/cli/analysis/loop-detector';
 import { loadConfig } from '@code-insights/cli/utils/config';
 import * as sqliteVec from 'sqlite-vec';
 import { embedOne, DEFAULT_EMBEDDING_CONFIG } from '@code-insights/cli/embeddings/client';
@@ -93,6 +94,7 @@ export async function analyzeSession(
     const formattedMessages = formatMessagesForAnalysis(messages);
     const estimatedTokens = client.estimateTokens(formattedMessages);
     const sessionMeta = buildSessionMeta(session);
+    const loopSignal = detectRageLoopHeuristic(messages);
 
     // Retrieve related insights for RAG context (AutoRefine pattern)
     const retrievalConfig = getRetrievalConfig();
@@ -129,7 +131,7 @@ export async function analyzeSession(
           { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
           { role: 'user', content: [
             buildCacheableConversationBlock(chunkFormatted),
-            { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
+            { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, detectRageLoopHeuristic(chunk), relatedInsights) },
           ] },
         ], { signal: options?.signal });
 
@@ -171,7 +173,7 @@ export async function analyzeSession(
             { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
             { role: 'user', content: [
               buildCacheableConversationBlock(facetMessages),
-              { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
+              { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta, loopSignal, relatedInsights) },
             ] },
           ], { signal: options?.signal });
 
@@ -205,7 +207,7 @@ export async function analyzeSession(
         { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
         { role: 'user', content: [
           buildCacheableConversationBlock(formattedMessages),
-          { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, undefined, relatedInsights) },
+          { type: 'text' as const, text: buildSessionAnalysisInstructions(session.project_name, session.summary, sessionMeta, loopSignal, relatedInsights) },
         ] },
       ], { signal: options?.signal });
 

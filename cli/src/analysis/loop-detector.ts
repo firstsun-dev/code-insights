@@ -29,7 +29,7 @@ export function detectRageLoopHeuristic(messages: SQLiteMessageRow[]): RageLoopS
     
     if (prevMsg) {
       const delta = (new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) / 1000;
-      if (delta < 60) {
+      if (Number.isFinite(delta) && delta >= 0 && delta < 60) {
         currentCluster.push(msg);
       } else {
         if (currentCluster.length >= 4) clusters.push([...currentCluster]);
@@ -46,7 +46,7 @@ export function detectRageLoopHeuristic(messages: SQLiteMessageRow[]): RageLoopS
     const tokens = cluster.map(m => {
       try {
         const usage = JSON.parse(m.usage || '{}');
-        return usage.inputTokens || usage.totalTokens || 0;
+        return usage.inputTokens || usage.input_tokens || usage.totalTokens || usage.total_tokens || 0;
       } catch {
         return 0;
       }
@@ -63,8 +63,15 @@ export function detectRageLoopHeuristic(messages: SQLiteMessageRow[]): RageLoopS
       const repetitions = cluster.filter((m, i) => {
         if (i === 0) return false;
         const prev = cluster[i - 1];
-        return m.content.slice(0, 100) === prev.content.slice(0, 100) || 
-               m.tool_calls === prev.tool_calls;
+        // Empty tool-call arrays are common and cannot demonstrate repetition.
+        const content = m.content.trim().replace(/\s+/g, ' ').slice(0, 120);
+        const prevContent = prev.content.trim().replace(/\s+/g, ' ').slice(0, 120);
+        const sameContent = content.length >= 12 && content === prevContent;
+        // Only compare actual tool invocations, not null or [] placeholders.
+        const calls = m.tool_calls?.trim();
+        const prevCalls = prev.tool_calls?.trim();
+        const sameCalls = Boolean(calls && calls !== '[]' && calls === prevCalls);
+        return sameContent || sameCalls;
       });
 
       if (repetitions.length >= 2) {
@@ -73,8 +80,8 @@ export function detectRageLoopHeuristic(messages: SQLiteMessageRow[]): RageLoopS
         
         return {
           detected: true,
-          confidence: 0.85,
-          reasoning: `Detected ${cluster.length} messages in ${Math.round((new Date(cluster[cluster.length-1].timestamp).getTime() - new Date(cluster[0].timestamp).getTime())/1000)}s with static token count (${Math.round(avg/1000)}k) and repetitive signals.`,
+          confidence: 0.8,
+          reasoning: `Suspected loop (verify stalled progress): ${cluster.length} messages in ${Math.round((new Date(cluster[cluster.length-1].timestamp).getTime() - new Date(cluster[0].timestamp).getTime())/1000)}s with static token count (${Math.round(avg/1000)}k) and repetitive signals.`,
           turnRange: [`Turn#${firstTurn}`, `Turn#${lastTurn}`]
         };
       }
