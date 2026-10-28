@@ -291,8 +291,8 @@ describe('saveFacetsToDb analysisVersion parameter', () => {
     expect(row.analysis_version).toBe('2.5.0');
   });
 
-  it('default ANALYSIS_VERSION constant is 3.0.0', () => {
+  it('default ANALYSIS_VERSION constant is 3.1.0', () => {
     // Verifies the constant that will be used as the default
-    expect(ANALYSIS_VERSION).toBe('3.0.0');
+    expect(ANALYSIS_VERSION).toBe('3.1.0');
   });
 });
