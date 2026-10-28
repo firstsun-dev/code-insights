@@ -384,6 +384,14 @@ describe('buildCacheableConversationBlock', () => {
 // ──────────────────────────────────────────────────────
 
 describe('buildSessionAnalysisInstructions', () => {
+  it('emits an advisory rage-loop hint only when detector reports a suspected loop', () => {
+    const signal = { detected: true, confidence: 0.8, reasoning: 'Repeated commands in static context', turnRange: ['Turn#0', 'Turn#4'] as [string, string] };
+    const prompted = buildSessionAnalysisInstructions('proj', null, undefined, signal);
+    expect(prompted).toContain('<rage_loop>');
+    expect(prompted).toContain('Turn#0 to Turn#4');
+    expect(buildSessionAnalysisInstructions('proj', null)).not.toContain('<rage_loop>');
+  });
+
   it('includes project name in the instructions', () => {
     const result = buildSessionAnalysisInstructions('my-app', null);
     expect(result).toContain('<project_name>my-app</project_name>');

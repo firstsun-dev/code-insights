@@ -61,6 +61,7 @@
                   "context-loss",
                   "scope-creep",
                   "repeated-mistakes",
+                  "rage-loop",
                   "documentation-gap",
                   "tooling-limitation"
                 ]

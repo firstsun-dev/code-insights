@@ -15,6 +15,7 @@ import {
   type SessionData,
 } from './analysis-db.js';
 import { getMaxInputTokens, buildSessionMeta } from './analysis-internal.js';
+import { detectRageLoopHeuristic } from '@code-insights/cli/analysis/loop-detector';
 
 /**
  * Extract facets only for a session that already has insights (backfill).
@@ -52,7 +53,7 @@ export async function extractFacetsOnly(
       { role: 'system', content: SHARED_ANALYST_SYSTEM_PROMPT },
       { role: 'user', content: [
         buildCacheableConversationBlock(formattedMessages),
-        { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta) },
+        { type: 'text' as const, text: buildFacetOnlyInstructions(session.project_name, session.summary, sessionMeta, detectRageLoopHeuristic(messages)) },
       ] },
     ], { signal: options?.signal });
 

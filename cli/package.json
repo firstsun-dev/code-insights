@@ -20,6 +20,7 @@
     "./utils/pricing": "./dist/utils/pricing.js",
     "./utils/telemetry": "./dist/utils/telemetry.js",
     "./analysis/prompts": "./dist/analysis/prompts.js",
+    "./analysis/loop-detector": "./dist/analysis/loop-detector.js",
     "./analysis/prompt-types": "./dist/analysis/prompt-types.js",
     "./analysis/prompt-constants": "./dist/analysis/prompt-constants.js",
     "./analysis/message-format": "./dist/analysis/message-format.js",
